@@ -27,10 +27,10 @@ svg{display:block;overflow:visible}
 </head>
 <body>
 <div id="stage">
-  <div class="bg" id="bgCrash" style="background-image:url(photos/crash.jpg)"></div>
-  <div class="bg" id="bgGarage" style="background-image:url(photos/garage.jpg)"></div>
-  <div class="bg" id="bgGarage2" style="background-image:url(photos/garage.jpg)"></div>
-  <div class="bg" id="bgStreet" style="background-image:url(photos/street.jpg)"></div>
+  <div class="bg" id="bgCrash" style="background-image:url(photos/crash-bg.jpg)"></div>
+  <div class="bg" id="bgGarage" style="background-image:url(photos/garage-bg.jpg)"></div>
+  <div class="bg" id="bgGarage2" style="background-image:url(photos/garage-bg.jpg)"></div>
+  <div class="bg" id="bgStreet" style="background-image:url(photos/street-bg.jpg)"></div>
   <div class="bg" id="bgRain" style="background:#2F3644"></div>
   <canvas id="rain" width="1440" height="1440"></canvas>
   <div class="siren" id="sirenR" style="left:-850px;top:-450px;background:radial-gradient(closest-side,rgba(255,40,40,.55),rgba(255,40,40,0))"></div>
@@ -293,7 +293,7 @@ function seek(T) {
   for (const [id, [a]] of Object.entries(BG)) {
     const o = bgO[id](t), el = q(id);
     el.style.opacity = o; el.style.display = o > .002 ? "block" : "none";
-    if (id !== "bgRain") { const k = clamp((t - a) / 6); el.style.filter = "blur(10px) brightness(.62) saturate(1.05)"; el.style.transform = `scale(${1.16 - .06 * k})`; }
+    if (id !== "bgRain") { const k = clamp((t - a) / 6); el.style.transform = `scale(${1.16 - .06 * k})`; }
   }
   const so = sirenO(t), ph = (t / (P / 2)) % 2; // alternate red/blue twice per beat
   const fl = x => Math.pow(Math.max(0, Math.cos(Math.PI * x)), 3);
