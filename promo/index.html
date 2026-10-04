@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>פנחס בורנשטיין · חורף בריא</title>
+<style>
+@font-face{font-family:Heebo;src:url(fonts/heebo-hebrew-400-normal.woff2) format("woff2");font-weight:400}
+@font-face{font-family:Heebo;src:url(fonts/heebo-hebrew-500-normal.woff2) format("woff2");font-weight:500}
+@font-face{font-family:Heebo;src:url(fonts/heebo-hebrew-700-normal.woff2) format("woff2");font-weight:600 700}
+@font-face{font-family:Heebo;src:url(fonts/heebo-hebrew-800-normal.woff2) format("woff2");font-weight:800}
+@font-face{font-family:Geist;src:url(fonts/Geist-Variable.woff2) format("woff2");font-weight:100 900}
+:root{--canvas:#EEECE8;--blue:#354897;--gold:#C6A955;--ink:#141414;--mute:#6E6A64}
+html,body{margin:0;background:var(--canvas)}
+#stage{position:relative;width:1440px;height:1440px;overflow:hidden;background:var(--canvas);
+  font-family:Heebo,Geist,sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased}
+#world{position:absolute;left:0;top:0;width:1440px;height:1440px;transform-origin:720px 720px}
+#shape{position:absolute;overflow:hidden;box-shadow:0 1px 2px rgba(20,20,20,.05),0 10px 30px rgba(20,20,20,.06)}
+.ly{position:absolute;left:0;top:0;white-space:nowrap}
+.geist{font-family:Geist,sans-serif;font-feature-settings:"tnum";direction:ltr}
+#pill{position:absolute}
+#cursor{position:absolute;left:0;top:0;width:34px;height:34px;transform-origin:0 0}
+svg{display:block;overflow:visible}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="world">
+    <div id="shape"></div>
+    <svg id="cursor" viewBox="0 0 34 34"><path d="M3 2 L3 26 L9.2 20.4 L13.4 30 L17.6 28.2 L13.5 18.8 L22 18.8 Z" fill="#141414" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg>
+  </div>
+</div>
+<script>
+// ---------- time grid (measured: 84.66 BPM, loop = 7 bars) ----------
+const P = 0.7086937, BEATS = 28, L = BEATS * P;
+const b = i => i * P;
+
+// ---------- closed-form spring step response ----------
+function S(t, w, z) {
+  if (t <= 0) return 0;
+  if (z >= 1) return 1 - Math.exp(-w * t) * (1 + w * t);
+  const wd = w * Math.sqrt(1 - z * z);
+  return 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + (z * w / wd) * Math.sin(wd * t));
+}
+const DEF = { w: 16, z: 0.86 };
+// A value retargeted many times = sum of one spring per change (+ tail of the previous loop).
+function track(v0, ev) {
+  let prev = v0;
+  const steps = ev.map(([t, v, o]) => { o = { ...DEF, ...(o || {}) }; const d = v - prev; prev = v; return { t, d, ...o }; });
+  if (Math.abs(prev - v0) > 1e-6) console.warn("track does not close", v0, prev);
+  return t => {
+    let v = v0;
+    for (const s of steps) {
+      const r = s.inst ? (t >= s.t ? 1 : 0) : S(t - s.t, s.w, s.z);
+      const r0 = s.inst ? 1 : S(t - s.t + L, s.w, s.z);
+      v += s.d * r + s.d * (r0 - 1);
+    }
+    return v;
+  };
+}
+const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+function ctrack(h0, ev) {
+  const ch = [0, 1, 2].map(k => track(hex(h0)[k], ev.map(([t, h, o]) => [t, hex(h)[k], o])));
+  return t => `rgb(${ch.map(f => Math.round(Math.min(255, Math.max(0, f(t))))).join(",")})`;
+}
+const mix = (a, c, f) => { a = hex(a); c = hex(c); return `rgb(${a.map((x, i) => Math.round(x + (c[i] - x) * f)).join(",")})`; };
+const clamp = (x, a = 0, c = 1) => Math.min(c, Math.max(a, x));
+const smooth = x => (x = clamp(x), x * x * (3 - 2 * x));
+
+// ---------- states (world px, shape centred on canvas) ----------
+const ST = {
+  button: [380, 100, 50, "#354897"], loader: [100, 100, 50, "#354897"],
+  counter: [640, 400, 44, "#FFFFFF"], team: [640, 320, 44, "#FFFFFF"],
+  slider: [640, 150, 40, "#FFFFFF"], tabs: [940, 124, 62, "#FFFFFF"],
+  toggle: [560, 150, 40, "#FFFFFF"], greet: [820, 460, 48, "#FFFFFF"],
+  cmdk: [860, 120, 30, "#FFFFFF"], cmdk2: [860, 236, 30, "#FFFFFF"],
+  toast: [700, 112, 56, "#141414"], logo: [720, 340, 44, "#FFFFFF"], logo2: [720, 460, 44, "#FFFFFF"],
+};
+const SEQ = [[b(2), "loader"], [b(4), "counter"], [b(8), "team"], [b(9), "slider"], [b(13), "tabs"], [b(16), "toggle"],
+  [b(18), "greet"], [b(20), "cmdk"], [b(22), "cmdk2"], [b(24), "toast"], [b(25), "logo"], [b(26), "logo2"], [b(27), "button"]];
+const zoomOf = ([w, h]) => Math.min(1040 / w, 820 / h, 4);
+const seqT = (k, o) => track(k(ST.button), SEQ.map(([t, n]) => [t, k(ST[n]), o]));
+const shW = seqT(s => s[0]), shH = seqT(s => s[1]), shR = seqT(s => s[2]);
+const zoom = seqT(zoomOf, { w: 8, z: 1 });
+const shBg = ctrack("#354897", [[b(0) + 0.15, "#2C3C84", { w: 20, z: 1 }], ...SEQ.map(([t, n]) => [t, ST[n][3], { w: 18, z: 1 }])]);
+
+// presses (cursor down → up)
+const PRESS = [[b(1), b(1) + .13], [b(8), b(8) + .13], [b(9), b(9) + .13], [b(10), b(12)], [b(13), b(13) + .13], [b(14), b(14) + .13],
+  [b(15), b(15) + .13], [b(16), b(16) + .13], [b(17), b(17) + .13], [b(20), b(20) + .13], [b(25), b(25) + .13], [b(27), b(27) + .13]];
+const pressT = track(0, PRESS.flatMap(([a, c]) => [[a, 1, { w: 34, z: 1 }], [c, 0, { w: 22, z: 1 }]]));
+const shPress = track(1, PRESS.filter(p => p[0] !== b(10)).flatMap(([a, c]) => [[a, .972, { w: 34, z: 1 }], [c, 1, { w: 20, z: .8 }]]));
+
+// ---------- cursor path (world coords relative to centre) ----------
+const REST = [150, 110];
+const CUR = [
+  [b(0), 60, 18, { w: 11, z: 1 }],
+  [b(2) + .05, 95, 85, { w: 9, z: 1 }],
+  [b(4), 240, 200, { w: 8, z: 1 }],
+  [b(7) + .25, 150, 120, { w: 13, z: 1 }],
+  [b(8) + .25, 210, 110, { w: 14, z: 1 }],
+  [b(9) + .22, -67.2, 30, { w: 14, z: 1 }],
+  [b(10) + .02, -280, 32, { w: 8, z: 1 }],
+  [b(11), -410, 44, { w: 9, z: 1 }],
+  [b(12) + .1, -150, -20, { w: 13, z: 1 }],
+  [b(13) + .2, 263, 4, { w: 14, z: 1 }],
+  [b(14) + .2, -394, 4, { w: 12, z: 1 }],
+  [b(16) + .1, -140, 6, { w: 13, z: 1 }],
+  [b(17) + .25, 240, 200, { w: 9, z: 1 }],
+  [b(19) + .2, 140, 110, { w: 12, z: 1 }],
+  [b(20) + .2, 300, 150, { w: 10, z: 1 }],
+  [b(24) + .1, 110, 20, { w: 13, z: 1 }],
+  [b(25) + .2, 230, 150, { w: 10, z: 1 }],
+  [b(26) + .2, 120, 140, { w: 12, z: 1 }],
+  [b(27) + .12, REST[0], REST[1], { w: 14, z: 1 }],
+];
+const curX = track(REST[0], CUR.map(([t, x, , o]) => [t, x, o]));
+const curY = track(REST[1], CUR.map(([t, , y, o]) => [t, y, o]));
+
+// ---------- slider: direct manipulation while held ----------
+const V0 = 0.62, TRK = 280, knob0 = TRK - V0 * 2 * TRK;
+const grab = curX(b(10)) - knob0;
+function rawSlider(t) {
+  const vr = (TRK - (curX(t) - grab)) / (2 * TRK);
+  const o = Math.max(0, (vr - 1) * 2 * TRK);
+  return { v: clamp(vr), s: 90 * (1 - Math.exp(-o / 110)) };
+}
+const sRel = rawSlider(b(12)).s;
+function slider(t) {
+  if (t < b(10)) return { v: V0, s: 0 };
+  if (t < b(12)) return rawSlider(t);
+  return { v: 1, s: sRel * (1 - S(t - b(12), 18, .8)) };
+}
+
+// ---------- pill: slider knob → tab indicator → toggle knob (edges on different springs) ----------
+const TAB = ["רכב", "דירה", "תכולה", "טיסה", "בריאות", "חיים", "פנסיה"], TW = 920 / 7;
+const tabRect = i => [460 - TW * (i + 1) + 6, 460 - TW * i - 6];
+const LEAD = { w: 28, z: .86 }, TRAIL = { w: 13, z: .9 };
+const pillEv = [ // [t, L, R, T, B, leadingEdge]
+  [b(10), -300, -260, 10, 50, null],
+  [b(13), ...tabRect(0), -42, 42, "R"],
+  [b(14), ...tabRect(1), -42, 42, "L"],
+  [b(15), ...tabRect(6), -42, 42, "L"],
+  [b(16), -168, -112, -28, 28, "R"],
+  [b(17), -228, -172, -28, 28, "L"],
+  [b(19), knob0 - 20, knob0 + 20, 10, 50, "inst"],
+];
+const pe = (k, edge) => pillEv.map(e => [e[0], e[k], e[5] === null || e[5] === "inst" ? { inst: true } : e[5] === edge ? LEAD : edge ? TRAIL : DEF]);
+const pL = track(knob0 - 20, pe(1, "L")), pR = track(knob0 + 20, pe(2, "R"));
+const pT = track(10, pe(3, null).map(e => [e[0], e[1], e[2].inst ? e[2] : DEF])), pB = track(50, pe(4, null).map(e => [e[0], e[1], e[2].inst ? e[2] : DEF]));
+const pCol = ctrack("#354897", [[b(16), "#FFFFFF", { w: 16, z: 1 }], [b(19), "#354897", { inst: true }]]);
+const togCol = ctrack("#DAD6CF", [[b(17), "#C6A955", { w: 14, z: 1 }], [b(19), "#DAD6CF", { inst: true }]]);
+
+// ---------- other driven values ----------
+const count = track(0, [[b(5), 500, { w: 9, z: 1 }], [b(6), 1000, { w: 9, z: 1 }], [b(7), 1500, { w: 9, z: 1 }], [b(9), 0, { inst: true }]]);
+const cmdRowY = track(0, [[b(22), -58], [b(24), 0, { inst: true }]]);
+const resHi = track(0, [[b(23), 1, { w: 22, z: 1 }], [b(24), 0, { inst: true }]]);
+const logoY = track(0, [[b(26), -60], [b(27) + .3, 0, { inst: true }]]);
+const PHRASE = "ממשיכים להוביל בשירות";
+const KEYS = (() => { // char i is typed at KEYS[i]
+  const k = [], w1 = 7;
+  for (let i = 0; i < w1; i++) k.push(b(20) + .28 + i * (b(21) - b(20) - .28) / (w1 - 1));
+  for (let i = 0; i < 7; i++) k.push(b(21) + .08 + i * .055);
+  for (let i = 0; i < 7; i++) k.push(b(22) - .055 * (6 - i));
+  return k;
+})();
+
+// ---------- DOM ----------
+const $ = s => document.querySelector(s);
+const shape = $("#shape"), world = $("#world"), cursor = $("#cursor");
+const pill = document.createElement("div"); pill.id = "pill";
+const layers = [];
+function layer(tin, tout, x, y, html, style = "") {
+  const el = document.createElement("div"); el.className = "ly"; el.innerHTML = html; el.style.cssText = style;
+  shape.appendChild(el); const l = { el, tin, tout, x, y }; layers.push(l); return l;
+}
+const ICON = (d, c, sw = 2.5, s = 32) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="${sw * 24 / s}" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+
+const BTN = `<div style="font:700 34px Heebo;color:#fff">שירות על בטוח</div>`;
+layer(-Infinity, b(2), 0, 0, BTN); layer(b(27), Infinity, 0, 0, BTN);
+const spin = layer(b(2), b(3), 0, 0, `<svg width="44" height="44" viewBox="0 0 44 44"><circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="4"/><circle id="arc" cx="22" cy="22" r="18" fill="none" stroke="#C6A955" stroke-width="4" stroke-linecap="round" stroke-dasharray="113.1" transform="rotate(-90 22 22)"/></svg>`);
+layer(b(3), b(4), 0, 0, `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#C6A955" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path id="chk" d="M5 12.5l4.5 4.5L19 7.5" stroke-dasharray="22"/></svg>`);
+// counter
+layer(b(4), b(8), 0, -122, `<div style="font:500 30px Heebo;color:#6E6A64">לקוחות שהצטרפו אלינו</div>`);
+const num = layer(b(4), b(8), 0, 2, `<div class="geist" style="font-size:156px;font-weight:600;letter-spacing:-5px;color:#141414">0</div>`);
+layer(b(7), b(8), 0, 126, `<div style="font:600 32px Heebo;color:#C6A955">ועוד ממשיכים לגדול</div>`);
+// team
+const team = layer(b(8), b(9), 0, -62, `<div style="font:700 80px Heebo;color:#141414"><span class="geist" style="color:#354897;font-weight:600">10</span> עובדים</div>`);
+layer(b(8), b(9), 0, 22, `<div style="font:500 32px Heebo;color:#6E6A64">לשירותכם בכל שאלה</div>`);
+const dots = layer(b(8), b(9), 0, 98, `<div style="display:flex;gap:14px;direction:rtl">${Array.from({ length: 10 }, () => `<i style="display:block;width:26px;height:26px;border-radius:13px;background:#354897"></i>`).join("")}</div>`);
+// slider
+layer(b(9), b(13), 0, -30, `<div style="width:560px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:600 32px Heebo">שביעות רצון לקוחות</span><span id="pct" class="geist" style="font-size:38px;font-weight:600;color:#354897">62%</span></div>`);
+const strk = layer(b(9), b(13), 0, 30, `<div id="trk" style="position:relative;height:10px;border-radius:5px;background:#E4E1DB"><div id="fill" style="position:absolute;top:0;height:10px;border-radius:5px;background:#354897"></div></div>`);
+// tabs
+const tabs = layer(b(13), b(16), 0, 0, `<div style="position:relative;width:920px;height:96px">${TAB.map((n, i) => `<span class="tab" style="position:absolute;top:0;width:${TW}px;right:${TW * i}px;text-align:center;font:500 34px/96px Heebo">${n}</span>`).join("")}</div>`);
+// toggle
+layer(b(16), b(18), 110, 0, `<div style="font:700 38px Heebo">מוגנים לחורף</div>`);
+const tog = layer(b(16), b(18), -170, 0, `<div id="tog" style="width:128px;height:68px;border-radius:34px"></div>`);
+// greeting
+layer(b(18), b(20), 0, -138, `<svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="#354897" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path id="umb" d="M3 11.5a9 9 0 0 1 18 0zM12 11.5v7a2 2 0 0 1-4 0M12 2.5v0" stroke-dasharray="70"/></svg>`);
+layer(b(18), b(20), 0, -22, `<div style="font:800 104px Heebo;color:#354897;letter-spacing:-1px">חורף בריא</div>`);
+layer(b(19), b(20), 0, 96, `<div style="font:500 40px Heebo;color:#2A2A2A">לכל לקוחותינו ובני משפחותיהם</div>`);
+// command palette
+const cmd = layer(b(20), b(24), 0, 0, `<div style="width:800px;height:60px;display:flex;align-items:center;gap:18px">
+  ${ICON('<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>', "#141414", 2.5, 34)}
+  <div style="flex:1;font:500 36px Heebo;display:flex;align-items:center"><span id="typed"></span><i id="caret" style="display:block;width:3px;height:40px;background:#C6A955;margin-right:3px"></i><span id="ph" style="color:#A9A49C">חיפוש…</span></div>
+  <span class="geist" style="font-size:24px;font-weight:500;color:#6E6A64;border:1.5px solid #D9D5CE;border-radius:10px;padding:6px 12px">⌘K</span></div>`);
+const res = layer(b(22), b(24), 0, 58, `<div id="res" style="width:820px;height:88px;border-radius:20px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;box-sizing:border-box">
+  <span style="font:600 34px Heebo">ממשיכים להוביל בשירות</span><span id="ent" class="geist" style="font-size:26px;border-radius:10px;padding:4px 12px">↵</span></div>`);
+// toast
+layer(b(24), b(25), 0, 0, `<div style="display:flex;align-items:center;gap:18px">${ICON('<circle cx="12" cy="12" r="9.5"/><path d="M7.8 12.3l2.8 2.8 5.6-5.8"/>', "#C6A955", 2.5, 40)}<span style="font:600 38px Heebo;color:#fff">ממשיכים להוביל בשירות</span></div>`);
+// logo + phone
+const logo = layer(b(25), b(27), 0, 0, `<div style="display:flex;align-items:center;gap:40px;direction:rtl">
+  <svg width="150" height="150" viewBox="0 0 100 100"><path id="lc" d="M30.3 22.6 A34 34 0 1 1 30.3 77.4" fill="none" stroke="#354897" stroke-width="15" stroke-dasharray="190"/><circle id="ld" cx="38" cy="50" r="7" fill="#C6A955"/></svg>
+  <i style="display:block;width:3px;height:170px;background:#354897"></i>
+  <div style="text-align:right"><div style="font:500 64px/1.02 Heebo;color:#354897">פנחס<br>בורנשטיין</div><div style="font:500 34px Heebo;color:#C6A955;margin-top:8px">שירות על בטוח</div></div></div>`);
+const phone = layer(b(26), b(27), 0, 160, `<div style="display:flex;align-items:center;gap:16px;direction:ltr"><span class="geist" style="font-size:62px;font-weight:600;color:#C6A955;letter-spacing:-1px">08-6326880</span>${ICON('<path d="M5 3.5h3.5l1.8 4.5-2.3 1.4a11 11 0 0 0 6.6 6.6l1.4-2.3 4.5 1.8V19a2 2 0 0 1-2 2A16.5 16.5 0 0 1 3 5.5a2 2 0 0 1 2-2z"/>', "#C6A955", 2.5, 48)}</div>`);
+shape.appendChild(pill); pill.style.zIndex = 1; tabs.el.style.zIndex = 2;
+const pillLayer = { tin: b(9), tout: b(18) };
+
+const tabEls = [...tabs.el.querySelectorAll(".tab")], dotEls = [...dots.el.querySelectorAll("i")];
+const q = id => document.getElementById(id);
+
+// ---------- layer enter / exit (own timing so swapped text never overlaps) ----------
+function vis(t, tin, tout) {
+  const en = tin === -Infinity ? 1 : S(t - tin - .07, 20, 1);
+  const ex = tout === Infinity ? 0 : smooth((t - tout) / .11);
+  return { o: en * (1 - ex), blur: (1 - en) * 9 + ex * 9, dy: (1 - en) * 12 - ex * 6, sc: .97 + .03 * en };
+}
+
+// ---------- seek(t): every style is a pure function of t ----------
+function seek(T) {
+  const t = ((T % L) + L) % L;
+  const z = zoom(t), sl = slider(t);
+  const w = shW(t) + sl.s, h = shH(t), cx = -sl.s / 2, sp = shPress(t);
+  world.style.transform = `scale(${z})`;
+  Object.assign(shape.style, {
+    width: w + "px", height: h + "px", borderRadius: Math.min(shR(t), h / 2, w / 2) + "px", background: shBg(t),
+    left: 720 + cx - w / 2 + "px", top: 720 - h / 2 + "px", transform: `scale(${sp})`,
+  });
+  const ox = w / 2 - cx, oy = h / 2; // world → shape-local
+  for (const l of layers) {
+    const v = vis(t, l.tin, l.tout), on = v.o > .002;
+    l.el.style.display = on ? "block" : "none";
+    if (!on) continue;
+    let x = l.x, y = l.y;
+    if (l === cmd) y = cmdRowY(t);
+    if (l === res) y = cmdRowY(t) + 116;
+    if (l === logo) y = logoY(t);
+    if (l === phone) y = logoY(t) + 190;
+    if (l === strk) x = cx;
+    l.el.style.opacity = v.o;
+    l.el.style.filter = v.blur > .05 ? `blur(${v.blur}px)` : "none";
+    l.el.style.transform = `translate(${ox + x}px,${oy + y + v.dy}px) translate(-50%,-50%) scale(${v.sc})`;
+  }
+  // spinner / check / umbrella / logo strokes
+  const a = q("arc"); a.setAttribute("stroke-dashoffset", 113.1 * (1 - .28 - .1 * Math.sin(t * 5))); a.setAttribute("transform", `rotate(${t * 520 - 90} 22 22)`);
+  q("chk").setAttribute("stroke-dashoffset", 22 * (1 - S(t - b(3) - .06, 14, 1)));
+  q("umb").setAttribute("stroke-dashoffset", 70 * (1 - S(t - b(18) - .08, 8, 1)));
+  q("lc").setAttribute("stroke-dashoffset", 190 * (1 - S(t - b(25) - .08, 9, 1)));
+  q("ld").setAttribute("r", 7 * S(t - b(25) - .3, 18, .82));
+  // counter + team
+  num.el.firstChild.textContent = Math.round(count(t)).toLocaleString("en-US");
+  dotEls.forEach((d, i) => { const k = S(t - b(8) - .14 - i * .045, 22, .84); d.style.transform = `scale(${k})`; });
+  team.el.querySelector(".geist").textContent = dotEls.filter((d, i) => t - b(8) - .14 - i * .045 > .06).length;
+  // slider
+  const len = 2 * TRK + sl.s, kx = TRK - sl.v * 2 * TRK - sl.s; // knob centre, world x
+  q("trk").style.width = len + "px";
+  q("fill").style.right = "0px"; q("fill").style.width = TRK - kx + "px";
+  q("pct").textContent = Math.round(sl.v * 100) + "%";
+  // pill
+  let L_ = pL(t), R_ = pR(t), T_ = pT(t), B_ = pB(t);
+  if (t >= b(10) && t < b(13)) { L_ = kx - 20; R_ = kx + 20; T_ = 10; B_ = 50; }
+  if (t < b(10)) { L_ = knob0 - 20; R_ = knob0 + 20; }
+  const pv = vis(t, pillLayer.tin, pillLayer.tout);
+  Object.assign(pill.style, {
+    left: ox + L_ + "px", top: oy + T_ + "px", width: R_ - L_ + "px", height: B_ - T_ + "px",
+    borderRadius: (B_ - T_) / 2 + "px", background: pCol(t), opacity: pv.o, display: pv.o > .002 ? "block" : "none",
+    boxShadow: t > b(15) ? "0 1px 3px rgba(20,20,20,.18)" : "none",
+  });
+  tabEls.forEach((el, i) => {
+    const [a0, a1] = tabRect(i), f = clamp((Math.min(a1, R_) - Math.max(a0, L_)) / (a1 - a0));
+    el.style.color = mix("#5A5650", "#FFFFFF", f);
+  });
+  q("tog").style.background = togCol(t);
+  // command palette typing
+  const n = KEYS.filter(k => t >= k).length;
+  q("typed").textContent = PHRASE.slice(0, n);
+  q("ph").style.display = n ? "none" : "inline";
+  q("caret").style.opacity = (n > 0 && n < PHRASE.length) || ((t * 1.6) % 1 < .6) ? 1 : 0;
+  const hi = resHi(t);
+  q("res").style.background = mix("#F3F1ED", "#354897", hi);
+  q("res").style.color = mix("#141414", "#FFFFFF", hi);
+  q("ent").style.background = mix("#FFFFFF", "#2C3C84", hi);
+  q("ent").style.color = mix("#6E6A64", "#FFFFFF", hi);
+  q("ent").style.transform = `scale(${1 - .12 * (S(t - b(23), 30, 1) - S(t - b(23) - .1, 20, 1))})`;
+  // cursor (world space, counter-scaled so it stays the same size on screen)
+  const pr = pressT(t);
+  cursor.style.transform = `translate(${720 + curX(t)}px,${720 + curY(t)}px) scale(${(1 - .14 * pr) / z})`;
+}
+window.seek = seek; window.LOOP = L; window.BEAT = P;
+window.ready = document.fonts.ready.then(() => seek(0));
+
+// preview playback (rendering drives seek directly)
+if (!/render/.test(location.search)) {
+  const au = new Audio("song.mp3"); let t0 = null;
+  document.addEventListener("click", () => { au.currentTime = 0; au.play(); t0 = performance.now(); });
+  const loop = now => { if (t0 === null) t0 = now; seek((now - t0) / 1000); requestAnimationFrame(loop); };
+  window.ready.then(() => requestAnimationFrame(loop));
+}
+</script>
+</body>
+</html>
