@@ -2,7 +2,7 @@
 import sys, subprocess, numpy as np
 SONG, OUT = sys.argv[1], sys.argv[2]
 SR, P, T0 = 48000, 0.7086937, 123.61814
-L = 28 * P
+L = 44 * P
 b = lambda i: i * P
 raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{T0}", "-t", f"{L}", "-i", SONG, "-ac", "2", "-ar", str(SR), "-f", "f32le", "-"], capture_output=True).stdout
 mus = np.frombuffer(raw, np.float32).reshape(-1, 2).copy()[: int(L * SR)]
@@ -25,14 +25,27 @@ def key():
 def thock():
     return click(1100, .55) + pop(180, .3)[: len(click())]
 
+def siren(d):
+    t = np.arange(int(d * SR)) / SR
+    f = np.where((t / (P / 2)) % 2 < 1, 960, 770)
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    e = np.minimum(1, np.minimum(t / .4, (d - t) / .5))
+    s = 0.07 * e * (np.sin(ph) + .3 * np.sin(2 * ph))
+    s[0] = 0.0001; return s
 ev = [(b(0) + .25, click(3600, .12)), (b(2), pop(400, .25)), (b(3), tone([1318, 1975])), (b(4), pop(600, .3)),
-      (b(5), tone([880], .12, .2, .04)), (b(6), tone([988], .12, .2, .04)), (b(7), tone([1175, 1760], .3, .25, .1)),
-      (b(11), tone([220, 330], .25, .18, .09)), (b(12), click(1600, .4)), (b(18), tone([1046, 1568, 2093], .5, .25, .18)),
-      (b(19), pop(700, .2)), (b(22), pop(650, .22)), (b(23), thock()), (b(24), pop(500, .35)), (b(26), tone([1318], .25, .22, .08))]
-for i in [1, 8, 9, 10, 13, 14, 15, 16, 17, 20, 25, 27]:
-    ev.append((b(i), click(2400 if i != 17 else 2000, .45)))
-k = [b(20) + .28 + i * (b(21) - b(20) - .28) / 6 for i in range(7)] + [b(21) + .08 + i * .055 for i in range(7)] + [b(22) - .055 * (6 - i) for i in range(7)]
+      (b(6), pop(560, .25)), (b(7), tone([880], .12, .2, .04)), (b(8), tone([988], .12, .2, .04)), (b(9), tone([1175, 1760], .3, .25, .1)),
+      (b(10), pop(500, .35)), (b(11), pop(620, .25)), (b(12), click(1800, .35)), (b(14), click(1600, .4)), (b(15), pop(600, .3)),
+      (b(16), tone([880], .12, .2, .04)), (b(17), tone([988], .12, .2, .04)), (b(18), tone([1175, 1760], .3, .25, .1)),
+      (b(19), pop(520, .25)), (b(20), tone([660], .15, .2, .05)), (b(21), pop(560, .25)), (b(22), tone([1318, 1975])),
+      (b(23), pop(600, .3)), (b(24), tone([880], .12, .2, .04)), (b(25), tone([988], .12, .2, .04)), (b(26), tone([1175, 1760], .3, .25, .1)),
+      (b(33), tone([1046, 1568, 2093], .5, .25, .18)), (b(34), pop(700, .2)), (b(37), pop(650, .22)), (b(38), thock()),
+      (b(39), pop(500, .35)), (b(41), tone([1318], .25, .22, .08)), (b(42), pop(700, .25))]
+for i in [1, 5, 22, 27, 28, 29, 30, 31, 32, 35, 40, 43]:
+    ev.append((b(i), click(2000 if i == 32 else 2400, .45)))
+k = [b(35) + .28 + i * (b(36) - b(35) - .28) / 6 for i in range(7)] + [b(36) + .08 + i * .055 for i in range(7)] + [b(37) - .055 * (6 - i) for i in range(7)]
 ev += [(t, key()) for t in k]
+sr_ = siren(b(8) - b(4))
+mix[int(b(4) * SR):int(b(4) * SR) + len(sr_)] += sr_[:, None]
 for t, s in ev:
     pk = int(np.argmax(np.abs(s)))          # align the measured peak to the event time
     i0 = int(round(t * SR)) - pk

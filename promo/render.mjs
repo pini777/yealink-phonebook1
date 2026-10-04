@@ -17,7 +17,8 @@ const shot = (p, t) => p.evaluate(t => seek(t), t).then(() => p.locator("#stage"
 if (mode === "beats") {
   mkdirSync(out, { recursive: true });
   const p = await page(); const P = await p.evaluate(() => BEAT);
-  for (let i = 0; i < 28; i++) {
+  const NB = await p.evaluate(() => Math.round(LOOP / BEAT));
+  for (let i = 0; i < NB; i++) {
     const buf = await shot(p, i * P + 0.3);
     (await import("node:fs")).writeFileSync(`${out}/b${String(i).padStart(2, "0")}.png`, buf);
   }
