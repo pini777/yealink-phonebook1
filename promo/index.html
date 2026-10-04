@@ -207,7 +207,7 @@ layer(b(6), b(10), 0, -96, `<div style="font:700 38px Heebo">סטטוס התבי
 const trk = layer(b(6), b(10), 0, 34, `<div style="position:relative;width:680px;height:120px;direction:ltr">
   <i style="position:absolute;left:40px;right:40px;top:28px;height:6px;border-radius:3px;background:#E4E1DB"></i>
   <i id="pfill" style="position:absolute;right:40px;top:28px;height:6px;border-radius:3px;background:#354897"></i>
-  ${STEPS.map((s, i) => `<div style="position:absolute;left:${340 - SX(i) - 60}px;top:0;width:120px;text-align:center">
+  ${STEPS.map((s, i) => `<div style="position:absolute;left:${340 + SX(i) - 60}px;top:0;width:120px;text-align:center">
     <div class="dot" style="width:62px;height:62px;border-radius:31px;margin:0 auto;display:flex;align-items:center;justify-content:center">${i === 3 ? ICON(CHECK, "#fff", 2.6, 36) : `<span class="geist" style="font-size:24px;font-weight:600">${i + 1}</span>`}</div>
     <div style="font:500 26px Heebo;margin-top:10px">${s}</div></div>`).join("")}</div>`);
 // claim done toast

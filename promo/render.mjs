@@ -13,7 +13,7 @@ async function page() {
   await p.goto(url); await p.evaluate(() => window.ready);
   return p;
 }
-const shot = (p, t) => p.evaluate(t => seek(t), t).then(() => p.locator("#stage").screenshot({ type: "png" }));
+const shot = (p, t) => p.evaluate(t => seek(t), t).then(() => p.locator("#stage").screenshot({ type: mode === "beats" ? "png" : "jpeg", quality: mode === "beats" ? undefined : 95 }));
 if (mode === "beats") {
   mkdirSync(out, { recursive: true });
   const p = await page(); const P = await p.evaluate(() => BEAT);
@@ -28,7 +28,7 @@ if (mode === "beats") {
   const frames = Math.round(L * 60), W = +nw, per = Math.ceil(frames / W);
   await Promise.all(Array.from({ length: W }, async (_, w) => {
     const p = await page(), f0 = w * per, f1 = Math.min(frames, f0 + per);
-    const ff = spawn("ffmpeg", ["-v", "error", "-y", "-f", "image2pipe", "-framerate", "240", "-i", "-",
+    const ff = spawn("ffmpeg", ["-v", "error", "-y", "-f", "image2pipe", "-c:v", "mjpeg", "-framerate", "240", "-i", "-",
       "-vf", "tmix=frames=4,select='eq(mod(n\\,4)\\,3)',setpts=N/60/TB", "-r", "60",
       "-c:v", "libx264", "-crf", "8", "-preset", "fast", "-pix_fmt", "yuv444p", `${out}.part${w}.mp4`], { stdio: ["pipe", "inherit", "inherit"] });
     for (let f = f0; f < f1; f++) for (let k = 0; k < 4; k++) {
