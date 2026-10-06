@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 const here = path.dirname(new URL(import.meta.url).pathname);
-const url = "file://" + here + "/index.html?render";
+const url = "file://" + here + "/" + (process.env.PAGE || "index.html") + "?render";
 const [mode, out, nw = "4"] = process.argv.slice(2);
 const browser = await chromium.launch();
 async function page() {
