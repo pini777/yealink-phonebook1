@@ -2,7 +2,7 @@
 import sys, subprocess, numpy as np
 SONG, OUT = sys.argv[1], sys.argv[2]
 SR, P, T0 = 48000, 0.7086937, 123.61814
-L = 14 * P
+L = 28 * P
 b = lambda i: i * P
 raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{T0}", "-t", f"{L}", "-i", SONG, "-ac", "2", "-ar", str(SR), "-f", "f32le", "-"], capture_output=True).stdout
 mus = np.frombuffer(raw, np.float32).reshape(-1, 2).copy()[: int(L * SR)]
@@ -32,9 +32,10 @@ def siren(d):
     e = np.minimum(1, np.minimum(t / .4, (d - t) / .5))
     s = 0.07 * e * (np.sin(ph) + .3 * np.sin(2 * ph))
     s[0] = 0.0001; return s
-ev = [(b(0), pop(600, .3)), (b(1), thock()), (b(2), tone([1046, 1568], .3, .25, .1)), (b(3), thock()),
-      (b(4), pop(560, .3)), (b(5), pop(620, .3)), (b(6), pop(560, .28)), (b(7), pop(640, .28)), (b(8), pop(720, .28)), (b(9), pop(800, .28)),
-      (b(10), tone([1046, 1568, 2093], .5, .25, .18)), (b(11), thock()), (b(12), pop(600, .35)), (b(12) + .18, pop(700, .3)), (b(13), tone([1318], .25, .22, .08))]
+soft = lambda fs: tone(fs, .9, .12, .35)
+ev = [(b(1), soft([1318])), (b(4), soft([880, 1318])), (b(6), soft([988])), (b(8), soft([880])), (b(10), soft([1046, 1568])),
+      (b(12.5), soft([1175])), (b(14.5), soft([1318])), (b(17.5), soft([880])), (b(18.5), soft([988])), (b(19.5), soft([1175])),
+      (b(20.5), soft([1318])), (b(22.6), soft([1046, 1568])), (b(25), soft([880, 1318, 1760]))]
 for t, s in ev:
     pk = int(np.argmax(np.abs(s)))          # align the measured peak to the event time
     i0 = int(round(t * SR)) - pk
