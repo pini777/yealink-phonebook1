@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>דרושים · פנחס בורנשטיין</title>
+<style>
+@font-face{font-family:Heebo;src:url(fonts/heebo-hebrew-500-normal.woff2) format("woff2");font-weight:500}
+@font-face{font-family:Heebo;src:url(fonts/heebo-hebrew-700-normal.woff2) format("woff2");font-weight:600 700}
+@font-face{font-family:Heebo;src:url(fonts/heebo-hebrew-800-normal.woff2) format("woff2");font-weight:800}
+@font-face{font-family:Geist;src:url(fonts/Geist-Variable.woff2) format("woff2");font-weight:100 900}
+html,body{margin:0;background:#0B1A4A}
+#stage{position:relative;width:1080px;height:1920px;overflow:hidden;background:#0B1A4A;font-family:Heebo,Geist,sans-serif;color:#fff;-webkit-font-smoothing:antialiased}
+#cam{position:absolute;inset:0;transform-origin:540px 900px}
+#photo{position:absolute;left:0;top:0;width:2375px;height:1920px;background:url(photos/office-full.jpg) 0 0/2375px 1920px;transform-origin:1315px 800px}
+#fade{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 50%,rgba(11,26,74,.15),rgba(11,26,74,.75) 75%)}
+#dim{position:absolute;inset:0;background:#0B1A4A;opacity:0}
+#flash{position:absolute;inset:0;background:#FFD200;opacity:0}
+#bar{position:absolute;right:0;top:0;height:10px;background:#FFD200}
+.ly{position:absolute;left:0;top:0;white-space:nowrap}
+.brush{display:inline-block;background:#FFD200;color:#0B1A4A;padding:6px 44px 14px;transform-origin:right center;
+  clip-path:polygon(2% 8%,12% 0,30% 6%,52% 1%,74% 5%,92% 0,100% 10%,98% 40%,100% 78%,94% 100%,70% 94%,46% 100%,24% 95%,6% 100%,0 84%,2% 48%)}
+.geist{font-family:Geist,sans-serif;direction:ltr}
+.card{display:flex;align-items:center;gap:30px;background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.2);border-radius:36px;padding:30px 44px;box-sizing:border-box}
+.pill{display:flex;align-items:center;gap:20px;background:#FFD200;color:#0B1A4A;border-radius:70px;padding:24px 54px;font-weight:700}
+.ch{display:inline-block}
+.w{display:inline-block;margin:0 .12em}
+.hs{text-shadow:0 12px 0 rgba(0,0,0,.35)}
+.k{color:#FFD200}
+.ico{position:relative}
+.ring{position:absolute;inset:-4px;border:5px solid #FFD200;border-radius:50%;opacity:0}
+.mq{position:absolute;right:0;white-space:nowrap;font:800 380px/1 Heebo;color:transparent;-webkit-text-stroke:3px rgba(255,210,0,.16)}
+.band{position:absolute;top:-400px;width:900px;height:2700px;transform-origin:center}
+svg{display:block;overflow:visible}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="cam"><div id="photo"></div><div id="fade"></div><div id="dim"></div><div class="mq" id="mq1" style="top:120px"></div><div class="mq" id="mq2" style="top:1440px"></div><div id="layers"></div></div>
+  <div class="band" id="bandY" style="background:#FFD200"></div><div class="band" id="bandN" style="background:#0B1A4A"></div>
+  <div id="flash"></div><div id="bar"></div>
+</div>
+<script>
+// ---------- time grid (measured: 84.66 BPM, 26 beats ≈ 18.4 s) ----------
+const P = 0.7086937, L = 26 * P, b = i => i * P;
+function S(t, w, z) {
+  if (t <= 0) return 0;
+  if (z >= 1) return 1 - Math.exp(-w * t) * (1 + w * t);
+  const wd = w * Math.sqrt(1 - z * z);
+  return 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + (z * w / wd) * Math.sin(wd * t));
+}
+const clamp = (x, a = 0, c = 1) => Math.min(c, Math.max(a, x));
+const smooth = x => (x = clamp(x), x * x * (3 - 2 * x));
+const Y = "#FFD200";
+const ICON = (d, s = 80, c = Y) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const I = {
+  head: '<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/><path d="M19 20a3 3 0 0 1-3 2h-3"/>',
+  coin: '<ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v4c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 10v4c0 1.7 3.1 3 7 3s7-1.3 7-3v-4M5 14v4c0 1.7 3.1 3 7 3s7-1.3 7-3v-4"/>',
+  fire: '<path d="M12 22c4 0 7-2.8 7-7 0-4.5-3.5-6.5-4.5-10C12 7 11 9 11 11c-1-.6-2-2-2-3.5C6.5 9.5 5 12 5 15c0 4.2 3 7 7 7z"/>',
+  team: '<circle cx="12" cy="8" r="3"/><circle cx="5" cy="10" r="2.2"/><circle cx="19" cy="10" r="2.2"/><path d="M6.5 19a5.5 5.5 0 0 1 11 0M1.5 18a3.6 3.6 0 0 1 5-3.2M22.5 18a3.6 3.6 0 0 0-5-3.2"/>',
+  pin: '<path d="M12 22s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6l8.5 7 8.5-7"/>',
+};
+// wrap each word so it can land on its own; "*word*" marks a keyword in yellow
+const W = (s) => s.split("<br>").map(line => line.split(" ").map(w => w.startsWith("*") ? `<span class="w k">${w.slice(1, -1)}</span>` : `<span class="w">${w}</span>`).join("")).join("<br>");
+const letters = (s) => [...s].map(c => `<span class="ch">${c === " " ? "&nbsp;" : c}</span>`).join("");
+const REASON = (n, ic, txt) => `<div style="display:flex;align-items:center;gap:40px"><span class="geist" style="font-size:190px;font-weight:800;color:${Y};line-height:1">${n}</span>
+  <div class="card" style="width:680px;padding:28px 34px">${ICON(ic, 84)}<span style="font:800 54px Heebo">${txt}</span></div></div>`;
+
+// [tin, tout, y, html, kind]   kind: slam (lands with a bounce), pop, slide, wipe (brush), jump (letters hop one by one)
+const OPEN = `<div class="hs" style="font:800 150px/1 Heebo">${W("משרדינו *גדל*")}</div>`;
+const FACT = (ic, txt, size = 104) => `<div style="display:flex;flex-direction:column;align-items:center;gap:56px">
+  <div class="ico" style="width:260px;height:260px;border-radius:130px;background:rgba(255,210,0,.14);border:3px solid ${Y};display:flex;align-items:center;justify-content:center"><i class="ring"></i><i class="ring"></i>${ICON(ic, 150)}</div>
+  <div class="hs" style="font:800 ${size}px/1.1 Heebo;text-align:center">${W(txt)}</div></div>`;
+const LY = [
+  [-Infinity, b(2), 820, OPEN, "words"],
+  [b(1), b(2), 1040, `<div class="brush" style="font:800 108px/1.1 Heebo">ומרחיבים את הצוות!</div>`, "wipe"],
+  [b(2), b(7), 600, `<div class="hs" style="font:800 160px/1 Heebo">${W("מחפשים")}</div>`, "words"],
+  [b(3), b(7), 820, `<div class="hs" style="font:800 150px/1 Heebo">${W("עובדי *מכירות*")}</div>`, "words"],
+  [b(4), b(7), 1110, `<div class="brush" style="font:800 280px/1.05 Heebo;padding:4px 60px 22px;box-shadow:0 18px 0 rgba(0,0,0,.3)">${letters("תותחים")}</div>`, "jump"],
+  [b(7), b(9), 520, `<div class="hs" style="font:800 120px Heebo;color:${Y}">${W("וגם")}</div>`, "words"],
+  [b(7.4), b(9), 960, `<div style="display:flex;flex-direction:column;align-items:center;gap:30px"><div class="ico">${ICON(I.head, 170)}</div><div class="hs" style="font:800 108px/1.1 Heebo;text-align:center">${W("עובד לשירות<br>*לקוחות*")}</div><div class="hs" style="font:600 64px Heebo">${W("משרה מלאה")}</div></div>`, "words"],
+  [b(9), b(11), 960, FACT(I.coin, "שכר *גבוה*<br>ומתגמל", 130), "words"],
+  [b(11), b(13), 960, FACT(I.fire, "תנאים *אש*", 150), "words"],
+  [b(13), b(15), 960, FACT(I.team, "אווירה צעירה<br>*וכיפית*", 128), "words"],
+  [b(15), b(17), 960, FACT(I.pin, "המשרד<br>*באשדוד*", 150), "words"],
+  [b(17), b(20), 900, `<div style="display:flex;flex-direction:column;align-items:center;gap:40px">
+    <svg width="300" height="300" viewBox="0 0 100 100"><path id="lc" d="M30.3 22.6 A34 34 0 1 1 30.3 77.4" fill="none" stroke="${Y}" stroke-width="15" stroke-dasharray="190"/><circle id="ld" cx="38" cy="50" r="7" fill="#fff"/></svg>
+    <div style="font:700 130px/1 Heebo">פנחס בורנשטיין</div></div>`, "pop"],
+  [b(18.5), b(20), 1260, `<div class="brush" style="font:800 90px/1.1 Heebo">שירות על בטוח</div>`, "wipe"],
+  [b(20), Infinity, 640, `<div class="hs" style="font:800 120px/1.15 Heebo;text-align:center">${W("שלחו<br>*קורות* *חיים*")}</div>`, "words"],
+  [b(21), Infinity, 960, `<div class="pill geist" style="font-size:84px;box-shadow:0 14px 0 rgba(0,0,0,.3)">${ICON(I.mail, 70, "#0B1A4A")}pb@pbslb.com</div>`, "slam"],
+];
+const host = document.getElementById("layers");
+const layers = LY.map(([tin, tout, y, html, kind]) => {
+  const el = document.createElement("div"); el.className = "ly"; el.innerHTML = html; host.appendChild(el);
+  return { el, tin, tout, y, kind, br: [...el.querySelectorAll(".brush")], ch: [...el.querySelectorAll(".ch")], ws: [...el.querySelectorAll(".w")], rings: [...el.querySelectorAll(".ring")], ico: el.querySelector(".ico"), pill: el.querySelector(".pill") };
+});
+// beats that hit hard: camera punch + shake
+const HIT = [2, 3, 4, 7.4, 9, 11, 13, 15, 17, 20, 21];
+const imp = (t, a) => S(t - a, 32, 1) - S(t - a - .06, 12, 1); // 0→1→0 pulse
+// how dark the photo is behind text-heavy beats (the monitor logo stays visible in the hook and at the end)
+// scene cuts: a yellow band then a navy band sweep across the screen, crossing the centre exactly on the cut
+const CUTS = [2, 7, 9, 11, 13, 15, 17, 20].map(b);
+const MQ = "דרושים · ".repeat(6);
+document.getElementById("mq1").textContent = MQ; document.getElementById("mq2").textContent = MQ;
+let mqUnit = 0;
+const DIMS = [[b(2), .66], [b(17), .5], [b(20), .62], [b(25), .55]];
+
+function seek(T) {
+  const t = ((T % L) + L) % L, ph = 2 * Math.PI * t / L;
+  let punch = 0, shake = 0;
+  for (const h of HIT) { punch += .045 * imp(t, b(h)); shake += Math.exp(-Math.max(0, t - b(h)) * 14) * (t > b(h) ? 1 : 0); }
+  for (let i = 0; i < 26; i++) punch += .018 * imp(t, b(i));
+  const sx = 16 * shake * Math.sin(t * 90), sy = 12 * shake * Math.cos(t * 77), rz = 1.4 * shake * Math.sin(t * 40);
+  document.getElementById("cam").style.transform = `translate(${sx}px,${sy}px) rotate(${rz}deg) scale(${1 + punch})`;
+  // outlined "דרושים" marquees drift in opposite directions; one full unit per loop keeps the seam invisible
+  const off = mqUnit * t / L;
+  document.getElementById("mq1").style.transform = `translateX(${off}px)`;
+  document.getElementById("mq2").style.transform = `translateX(${mqUnit - off}px)`;
+  let bandX = null;
+  for (const c of CUTS) { let d = t - c; if (d > L / 2) d -= L; if (d < -L / 2) d += L; if (Math.abs(d) < .2) bandX = d; }
+  const bY = document.getElementById("bandY"), bN = document.getElementById("bandN");
+  if (bandX === null) { bY.style.display = bN.style.display = "none"; }
+  else {
+    const x = -bandX / .2 * 1500; // +1500 (off right) → −1500 (off left)
+    bY.style.display = bN.style.display = "block";
+    bY.style.transform = `translateX(${x + 90}px) skewX(-14deg)`; bY.style.left = "90px";
+    bN.style.transform = `translateX(${x + 560}px) skewX(-14deg)`; bN.style.left = "90px";
+  }
+  document.getElementById("photo").style.transform = `translateX(${-775 + 230 * Math.sin(ph)}px) scale(${1.06 + .04 * Math.cos(ph)})`;
+  let dim = .55, prev = .55; for (const [a, v] of DIMS) { dim += (v - prev) * S(t - a, 8, 1); prev = v; }
+  document.getElementById("dim").style.opacity = dim;
+  document.getElementById("flash").style.opacity = .3 * imp(t, b(4)) + .15 * imp(t, b(9)) + .15 * imp(t, b(17));
+  document.getElementById("bar").style.width = 1080 * t / L + "px";
+  for (const l of layers) {
+    const pre = l.tin === -Infinity;
+    const ex = l.tout === Infinity ? 0 : smooth((t - l.tout) / .1);
+    const o = (pre ? 1 : clamp((t - l.tin) / .06)) * (1 - ex);
+    l.el.style.display = o > .002 ? "block" : "none";
+    if (o <= .002) continue;
+    let tr = "", blur = ex * 10;
+    if (l.kind === "pop") { const e = pre ? 1 : S(t - l.tin, 18, .75); tr = `scale(${.75 + .25 * e})`; blur += (1 - clamp(e)) * 10; }
+    if (l.kind === "slam") { const e = S(t - l.tin, 22, .45); tr = `scale(${1.7 - .7 * e})`; blur += (1 - clamp(e)) * 14; }
+    if (l.kind === "slide") { const e = S(t - l.tin, 16, .7); tr = `translateX(${-200 * (1 - e)}px)`; blur += (1 - clamp(e)) * 8; }
+    if (l.kind === "wipe" || l.kind === "jump" || l.kind === "words") tr = "";
+    l.ws.forEach((w, i) => {
+      const s = pre ? 9 : t - l.tin - i * .07;
+      const e = S(s, 20, .42);
+      w.style.transform = `translateY(${-70 * (1 - e)}px) rotate(${(i % 2 ? 9 : -9) * (1 - e)}deg) scale(${2.3 - 1.3 * e})`;
+      w.style.opacity = pre ? 1 : clamp(s / .05);
+      w.style.filter = s < .25 && !pre ? `blur(${(1 - clamp(e)) * 10}px)` : "none";
+    });
+    l.rings.forEach((r, i) => { const s = t - l.tin - i * P; const u = s / .6; r.style.opacity = u > 0 && u < 1 ? .9 * (1 - u) : 0; r.style.transform = `scale(${1 + 1.3 * clamp(u)})`; });
+    if (l.pill) l.pill.style.transform = `scale(${1 + .06 * [21, 22, 23, 24, 25].reduce((a, i) => a + imp(t, b(i)), 0)})`;
+    l.br.forEach(e => { const k = l.kind === "wipe" || l.kind === "jump" ? clamp(S(t - l.tin, 18, 1)) : 1; e.style.transform = `rotate(-2deg) scaleX(${k})`; });
+    // letters hop one after another, then keep a small bounce on every half beat
+    l.ch.forEach((c, i) => {
+      const s = t - l.tin - .1 - i * .06;
+      const land = S(s, 20, .4), hop = s > .5 ? 18 * Math.abs(Math.sin(Math.PI * (s - .5) / (P / 2) + i * .5)) * Math.exp(-(s - .5) * .8) : 0;
+      c.style.transform = `translateY(${-140 * (1 - land) - hop}px) scale(${.4 + .6 * land})`;
+      c.style.opacity = clamp(s / .05);
+    });
+    const ico = l.el.querySelector(".ico");
+    if (ico) { const s2 = t - l.tin; const bob = s2 > .4 ? .07 * Math.abs(Math.sin(Math.PI * s2 / (P / 2))) : 0; ico.style.transform = `scale(${S(s2, 18, .45) + bob}) rotate(${(1 - S(s2, 12, .6)) * -25}deg)`; }
+    const lc = l.el.querySelector("#lc");
+    if (lc) { lc.setAttribute("stroke-dashoffset", 190 * (1 - S(t - l.tin - .1, 9, 1))); l.el.querySelector("#ld").setAttribute("r", 7 * S(t - l.tin - .35, 18, .5)); }
+    l.el.style.opacity = o;
+    l.el.style.filter = blur > .05 ? `blur(${blur}px)` : "none";
+    l.el.style.transform = `translate(540px,${l.y}px) translate(-50%,-50%) ${tr}`;
+  }
+}
+window.seek = seek; window.LOOP = L; window.BEAT = P;
+window.ready = document.fonts.ready.then(() => { mqUnit = document.getElementById("mq1").scrollWidth / 6; seek(0); });
+if (!/render/.test(location.search)) {
+  const au = new Audio("song.mp3"); let t0 = null;
+  document.addEventListener("click", () => { au.currentTime = 0; au.play(); t0 = performance.now(); });
+  const loop = now => { if (t0 === null) t0 = now; seek((now - t0) / 1000); requestAnimationFrame(loop); };
+  window.ready.then(() => requestAnimationFrame(loop));
+}
+</script>
+</body>
+</html>

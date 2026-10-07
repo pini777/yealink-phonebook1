@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>פנחס בורנשטיין · חורף בריא</title>
+<style>
+@font-face{font-family:Heebo;src:url(fonts/heebo-hebrew-400-normal.woff2) format("woff2");font-weight:400}
+@font-face{font-family:Heebo;src:url(fonts/heebo-hebrew-500-normal.woff2) format("woff2");font-weight:500}
+@font-face{font-family:Heebo;src:url(fonts/heebo-hebrew-700-normal.woff2) format("woff2");font-weight:600 700}
+@font-face{font-family:Heebo;src:url(fonts/heebo-hebrew-800-normal.woff2) format("woff2");font-weight:800}
+@font-face{font-family:Geist;src:url(fonts/Geist-Variable.woff2) format("woff2");font-weight:100 900}
+:root{--canvas:#EEECE8;--blue:#354897;--gold:#C6A955;--ink:#141414;--mute:#6E6A64}
+html,body{margin:0;background:var(--canvas)}
+#stage{position:relative;width:1440px;height:1440px;overflow:hidden;background:var(--canvas);
+  font-family:Heebo,Geist,sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased}
+.bg{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0}
+.siren{position:absolute;width:1700px;height:1700px;border-radius:50%;opacity:0}
+#rain{position:absolute;inset:0;opacity:0}
+#world{position:absolute;left:0;top:0;width:1440px;height:1440px;transform-origin:720px 720px}
+#shape{position:absolute;overflow:hidden;box-shadow:0 1px 2px rgba(20,20,20,.08),0 14px 40px rgba(20,20,20,.14)}
+.ly{position:absolute;left:0;top:0;white-space:nowrap}
+.geist{font-family:Geist,sans-serif;font-feature-settings:"tnum";direction:ltr}
+#pill{position:absolute}
+#cursor{position:absolute;left:0;top:0;width:34px;height:34px;transform-origin:0 0}
+svg{display:block;overflow:visible}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="bg" id="bgCrash" style="background-image:url(photos/crash-bg.jpg)"></div>
+  <div class="bg" id="bgGarage" style="background-image:url(photos/garage-bg.jpg)"></div>
+  <div class="bg" id="bgGarage2" style="background-image:url(photos/garage-bg.jpg)"></div>
+  <div class="bg" id="bgStreet" style="background-image:url(photos/street-bg.jpg)"></div>
+  <div class="bg" id="bgRain" style="background:#2F3644"></div>
+  <canvas id="rain" width="1440" height="1440"></canvas>
+  <div class="siren" id="sirenR" style="left:-850px;top:-450px;background:radial-gradient(closest-side,rgba(255,40,40,.55),rgba(255,40,40,0))"></div>
+  <div class="siren" id="sirenB" style="left:590px;top:-450px;background:radial-gradient(closest-side,rgba(40,90,255,.6),rgba(40,90,255,0))"></div>
+  <div id="world">
+    <div id="shape"></div>
+    <svg id="cursor" viewBox="0 0 34 34"><path d="M3 2 L3 26 L9.2 20.4 L13.4 30 L17.6 28.2 L13.5 18.8 L22 18.8 Z" fill="#141414" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg>
+  </div>
+</div>
+<script>
+// ---------- time grid (measured: 84.66 BPM, loop = 11 bars) ----------
+const P = 0.7086937, BEATS = 44, L = BEATS * P;
+const b = i => i * P;
+
+// ---------- closed-form spring step response ----------
+function S(t, w, z) {
+  if (t <= 0) return 0;
+  if (z >= 1) return 1 - Math.exp(-w * t) * (1 + w * t);
+  const wd = w * Math.sqrt(1 - z * z);
+  return 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + (z * w / wd) * Math.sin(wd * t));
+}
+const DEF = { w: 16, z: 0.86 };
+// A value retargeted many times = sum of one spring per change (+ tail of the previous loop).
+function track(v0, ev) {
+  let prev = v0;
+  const steps = ev.map(([t, v, o]) => { o = { ...DEF, ...(o || {}) }; const d = v - prev; prev = v; return { t, d, ...o }; });
+  if (Math.abs(prev - v0) > 1e-6) console.warn("track does not close", v0, prev);
+  return t => {
+    let v = v0;
+    for (const s of steps) {
+      const r = s.inst ? (t >= s.t ? 1 : 0) : S(t - s.t, s.w, s.z);
+      const r0 = s.inst ? 1 : S(t - s.t + L, s.w, s.z);
+      v += s.d * r + s.d * (r0 - 1);
+    }
+    return v;
+  };
+}
+const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+function ctrack(h0, ev) {
+  const ch = [0, 1, 2].map(k => track(hex(h0)[k], ev.map(([t, h, o]) => [t, hex(h)[k], o])));
+  return t => `rgb(${ch.map(f => Math.round(Math.min(255, Math.max(0, f(t))))).join(",")})`;
+}
+const mix = (a, c, f) => { a = hex(a); c = hex(c); return `rgb(${a.map((x, i) => Math.round(x + (c[i] - x) * f)).join(",")})`; };
+const clamp = (x, a = 0, c = 1) => Math.min(c, Math.max(a, x));
+const smooth = x => (x = clamp(x), x * x * (3 - 2 * x));
+const W = "#FFFFFF";
+
+// ---------- states (world px, shape centred on canvas): [w, h, radius, colour, zoom?] ----------
+const ST = {
+  button: [380, 100, 50, "#354897"], loader: [100, 100, 50, "#354897"],
+  alert: [640, 320, 44, W], tracker: [760, 320, 44, W], done: [620, 112, 56, "#141414"],
+  ba: [440, 440, 36, W, 1.25], claims: [640, 400, 44, W], health: [640, 380, 44, W], approve: [720, 190, 40, W],
+  counter: [640, 400, 44, W], team: [640, 320, 44, W], tabs: [940, 124, 62, W],
+  toggle: [560, 150, 40, W], greet: [820, 460, 48, W],
+  cmdk: [860, 120, 30, W], cmdk2: [860, 236, 30, W],
+  toast: [700, 112, 56, "#141414"], logo: [720, 340, 44, W], logo2: [720, 460, 44, W], logo3: [720, 560, 44, W],
+};
+const SEQ = [[b(2), "loader"], [b(4), "alert"], [b(6), "tracker"], [b(10), "done"], [b(11), "ba"], [b(15), "claims"],
+  [b(19), "health"], [b(21), "approve"], [b(23), "counter"], [b(27), "team"], [b(28), "tabs"], [b(31), "toggle"],
+  [b(33), "greet"], [b(35), "cmdk"], [b(37), "cmdk2"], [b(39), "toast"], [b(40), "logo"], [b(41), "logo2"], [b(42), "logo3"], [b(43), "button"]];
+const zoomOf = s => s[4] || Math.min(1040 / s[0], 820 / s[1], 4);
+const seqT = (k, o) => track(k(ST.button), SEQ.map(([t, n]) => [t, k(ST[n]), o]));
+const shW = seqT(s => s[0]), shH = seqT(s => s[1]), shR = seqT(s => s[2]);
+const zoom = seqT(zoomOf, { w: 8, z: 1 });
+const shBg = ctrack("#354897", [[b(0) + 0.15, "#2C3C84", { w: 20, z: 1 }], ...SEQ.map(([t, n]) => [t, ST[n][3], { w: 18, z: 1 }])]);
+
+// ---------- backgrounds: real photos behind the UI, sirens, rain ----------
+const fadeIn = (a, c) => track(0, [[a, 1, { w: 7, z: 1 }], [c, 0, { w: 7, z: 1 }]]);
+const BG = { bgCrash: [b(4), b(8)], bgGarage: [b(8), b(11)], bgStreet: [b(11), b(28)], bgGarage2: [b(28), b(33)], bgRain: [b(33), b(35)] };
+const bgO = Object.fromEntries(Object.entries(BG).map(([k, [a, c]]) => [k, fadeIn(a, c)]));
+const sirenO = fadeIn(b(4), b(8) - .2);
+const rainO = fadeIn(b(33), b(35));
+
+// presses (cursor down → up)
+const CLICK = [1, 5, 22, 27, 28, 29, 30, 31, 32, 35, 40, 43];
+const PRESS = [...CLICK.map(i => [b(i), b(i) + .13]), [b(12), b(14)]].sort((x, y) => x[0] - y[0]);
+const pressT = track(0, PRESS.flatMap(([a, c]) => [[a, 1, { w: 34, z: 1 }], [c, 0, { w: 22, z: 1 }]]));
+const shPress = track(1, CLICK.flatMap(i => [[b(i), .972, { w: 34, z: 1 }], [b(i) + .13, 1, { w: 20, z: .8 }]]));
+
+// ---------- cursor path (world coords relative to centre) ----------
+const REST = [150, 110];
+const CUR = [
+  [b(0), 60, 18, { w: 11, z: 1 }],
+  [b(2) + .05, 95, 85, { w: 9, z: 1 }],
+  [b(4) + .15, 30, 92, { w: 11, z: 1 }],
+  [b(6) + .1, 300, 210, { w: 9, z: 1 }],
+  [b(10) + .1, 200, 120, { w: 10, z: 1 }],
+  [b(11) + .2, 200, 4, { w: 13, z: 1 }],
+  [b(12) + .03, -60, 10, { w: 7, z: 1 }],
+  [b(13), -200, 16, { w: 8, z: 1 }],
+  [b(14) + .15, 160, 180, { w: 10, z: 1 }],
+  [b(15) + .2, 240, 210, { w: 9, z: 1 }],
+  [b(21) + .15, -232, 8, { w: 12, z: 1 }],
+  [b(22) + .2, 240, 200, { w: 10, z: 1 }],
+  [b(26) + .25, 150, 120, { w: 13, z: 1 }],
+  [b(27) + .25, 210, 110, { w: 14, z: 1 }],
+  [b(28) + .2, 263, 4, { w: 14, z: 1 }],
+  [b(29) + .2, -394, 4, { w: 12, z: 1 }],
+  [b(31) + .1, -140, 6, { w: 13, z: 1 }],
+  [b(32) + .25, 240, 200, { w: 9, z: 1 }],
+  [b(34) + .2, 140, 110, { w: 12, z: 1 }],
+  [b(35) + .2, 300, 150, { w: 10, z: 1 }],
+  [b(39) + .1, 110, 20, { w: 13, z: 1 }],
+  [b(40) + .2, 230, 150, { w: 10, z: 1 }],
+  [b(42) + .1, 30, 172, { w: 12, z: 1 }],
+  [b(43) + .12, REST[0], REST[1], { w: 14, z: 1 }],
+];
+const curX = track(REST[0], CUR.map(([t, x, , o]) => [t, x, o]));
+const curY = track(REST[1], CUR.map(([t, , y, o]) => [t, y, o]));
+
+// ---------- before/after handle: direct manipulation while held ----------
+const HMAX = 196, grab = curX(b(12)) - HMAX;
+const rawH = t => clamp(curX(t) - grab, -HMAX, HMAX);
+const handle = t => t < b(12) ? HMAX : t < b(14) ? rawH(t) : rawH(b(14));
+
+// ---------- pill: tab indicator → toggle knob (edges ride different springs) ----------
+const TAB = ["רכב", "דירה", "תכולה", "טיסה", "בריאות", "חיים", "פנסיה"], TW = 920 / 7;
+const tabRect = i => [460 - TW * (i + 1) + 6, 460 - TW * i - 6];
+const LEAD = { w: 28, z: .86 }, TRAIL = { w: 13, z: .9 };
+const pillEv = [ // [t, L, R, T, B, leadingEdge]
+  [b(29), ...tabRect(1), -42, 42, "L"],
+  [b(30), ...tabRect(6), -42, 42, "L"],
+  [b(31), -168, -112, -28, 28, "R"],
+  [b(32), -228, -172, -28, 28, "L"],
+  [b(34), ...tabRect(0), -42, 42, "inst"],
+];
+const pe = (k, edge) => pillEv.map(e => [e[0], e[k], e[5] === "inst" ? { inst: true } : e[5] === edge ? LEAD : edge ? TRAIL : DEF]);
+const [r0L, r0R] = tabRect(0);
+const pL = track(r0L, pe(1, "L")), pR = track(r0R, pe(2, "R")), pT = track(-42, pe(3, null)), pB = track(42, pe(4, null));
+const pCol = ctrack("#354897", [[b(31), "#FFFFFF", { w: 16, z: 1 }], [b(34), "#354897", { inst: true }]]);
+const togCol = ctrack("#DAD6CF", [[b(32), "#C6A955", { w: 14, z: 1 }], [b(34), "#DAD6CF", { inst: true }]]);
+
+// ---------- other driven values ----------
+const CNT = { w: 9, z: 1 };
+const claims = track(0, [[b(16), 300, CNT], [b(17), 600, CNT], [b(18), 800, CNT], [b(20), 0, { inst: true }]]);
+const count = track(0, [[b(24), 500, CNT], [b(25), 1000, CNT], [b(26), 1500, CNT], [b(28), 0, { inst: true }]]);
+const prog = track(0, [[b(7), 1 / 3], [b(8), 2 / 3], [b(9), 1], [b(11), 0, { inst: true }]]);
+const approved = track(0, [[b(22), 1, { w: 20, z: 1 }], [b(23) + .2, 0, { inst: true }]]);
+const cmdRowY = track(0, [[b(37), -58], [b(39), 0, { inst: true }]]);
+const resHi = track(0, [[b(38), 1, { w: 22, z: 1 }], [b(39), 0, { inst: true }]]);
+const logoY = track(0, [[b(41), -60], [b(42), -100], [b(43) + .3, 0, { inst: true }]]);
+const PHRASE = "ממשיכים להוביל בשירות";
+const KEYS = (() => { // char i is typed at KEYS[i]
+  const k = [];
+  for (let i = 0; i < 7; i++) k.push(b(35) + .28 + i * (b(36) - b(35) - .28) / 6);
+  for (let i = 0; i < 7; i++) k.push(b(36) + .08 + i * .055);
+  for (let i = 0; i < 7; i++) k.push(b(37) - .055 * (6 - i));
+  return k;
+})();
+
+// ---------- DOM ----------
+const $ = s => document.querySelector(s);
+const shape = $("#shape"), world = $("#world"), cursor = $("#cursor");
+const pill = document.createElement("div"); pill.id = "pill";
+const layers = [];
+function layer(tin, tout, x, y, html, style = "") {
+  const el = document.createElement("div"); el.className = "ly"; el.innerHTML = html; el.style.cssText = style;
+  shape.appendChild(el); const l = { el, tin, tout, x, y }; layers.push(l); return l;
+}
+const ICON = (d, c, sw = 2.5, s = 32) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="${sw * 24 / s}" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const CHECK = '<path d="M7.8 12.3l2.8 2.8 5.6-5.8"/>';
+
+const BTN = `<div style="font:700 34px Heebo;color:#fff">שירות על בטוח</div>`;
+layer(-Infinity, b(2), 0, 0, BTN); layer(b(43), Infinity, 0, 0, BTN);
+layer(b(2), b(3), 0, 0, `<svg width="44" height="44" viewBox="0 0 44 44"><circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="4"/><circle id="arc" cx="22" cy="22" r="18" fill="none" stroke="#C6A955" stroke-width="4" stroke-linecap="round" stroke-dasharray="113.1" transform="rotate(-90 22 22)"/></svg>`);
+layer(b(3), b(4), 0, 0, `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#C6A955" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path id="chk" d="M5 12.5l4.5 4.5L19 7.5" stroke-dasharray="22"/></svg>`);
+// accident report
+layer(b(4), b(6), 0, -88, `<div style="display:flex;align-items:center;gap:14px"><i id="live" style="display:block;width:14px;height:14px;border-radius:7px;background:#D93A3A"></i><span style="font:700 46px Heebo">דיווח על תאונה</span></div>`);
+layer(b(4), b(6), 0, -24, `<div style="font:500 28px Heebo;color:#6E6A64">מוקד התביעות זמין עכשיו</div>`);
+const openBtn = layer(b(4), b(6), 0, 82, `<div id="openBtn" style="width:300px;height:76px;border-radius:38px;background:#354897;color:#fff;font:600 30px/76px Heebo;text-align:center">פתיחת תביעה</div>`);
+// claim tracker
+const STEPS = ["התקבלה", "שמאי", "מוסך", "שולם"], SX = i => 300 - 200 * i;
+layer(b(6), b(10), 0, -96, `<div style="font:700 38px Heebo">סטטוס התביעה</div>`);
+const trk = layer(b(6), b(10), 0, 34, `<div style="position:relative;width:680px;height:120px;direction:ltr">
+  <i style="position:absolute;left:40px;right:40px;top:28px;height:6px;border-radius:3px;background:#E4E1DB"></i>
+  <i id="pfill" style="position:absolute;right:40px;top:28px;height:6px;border-radius:3px;background:#354897"></i>
+  ${STEPS.map((s, i) => `<div style="position:absolute;left:${340 + SX(i) - 60}px;top:0;width:120px;text-align:center">
+    <div class="dot" style="width:62px;height:62px;border-radius:31px;margin:0 auto;display:flex;align-items:center;justify-content:center">${i === 3 ? ICON(CHECK, "#fff", 2.6, 36) : `<span class="geist" style="font-size:24px;font-weight:600">${i + 1}</span>`}</div>
+    <div style="font:500 26px Heebo;margin-top:10px">${s}</div></div>`).join("")}</div>`);
+// claim done toast
+layer(b(10), b(11), 0, 0, `<div style="display:flex;align-items:center;gap:18px">${ICON('<circle cx="12" cy="12" r="9.5"/>' + CHECK, "#C6A955", 2.5, 40)}<span style="font:600 38px Heebo;color:#fff">התביעה טופלה, הרכב חוזר לכביש</span></div>`);
+// before / after
+const ba = layer(b(11), b(15), 0, 0, `<div style="position:relative;width:404px;height:404px;border-radius:24px;overflow:hidden;direction:ltr">
+  <img src="photos/before.jpg" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+  <img id="after" src="photos/after.jpg" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+  <span id="lblB" style="position:absolute;right:14px;top:14px;font:600 22px Heebo;color:#fff;background:rgba(20,20,20,.55);padding:4px 14px;border-radius:16px">לפני</span>
+  <span id="lblA" style="position:absolute;left:14px;top:14px;font:600 22px Heebo;color:#141414;background:#C6A955;padding:4px 14px;border-radius:16px">אחרי</span>
+  <i id="hline" style="position:absolute;top:0;bottom:0;width:4px;margin-left:-2px;background:#fff"></i>
+  <div id="hknob" style="position:absolute;top:174px;width:56px;height:56px;margin-left:-28px;border-radius:28px;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center">${ICON('<path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/>', "#354897", 2.5, 30)}</div>
+  <span style="position:absolute;left:14px;bottom:12px;font:500 16px Heebo;color:rgba(255,255,255,.85)">להמחשה בלבד</span></div>`);
+// claims counter
+layer(b(15), b(19), 0, -122, `<div style="font:500 30px Heebo;color:#6E6A64">תביעות שטופלו במשרד</div>`);
+const nClaims = layer(b(15), b(19), 0, 2, `<div class="geist" style="font-size:156px;font-weight:600;letter-spacing:-5px">0</div>`);
+layer(b(18), b(19), 0, 126, `<div style="font:600 30px Heebo;color:#C6A955">רכב · דירה · בריאות · חיים</div>`);
+// health
+layer(b(19), b(21), 0, -128, `<div style="font:700 40px Heebo">ביטוח בריאות</div>`);
+layer(b(19), b(21), 0, 6, `<svg width="540" height="150" viewBox="0 0 540 150" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path id="ecg" d="M0 80H150l18-30 22 70 26-110 24 100 16-30H330l14-20 16 20H540" stroke="#354897" stroke-width="5" stroke-dasharray="900"/>
+  <path id="ecg2" d="M0 80H150l18-30 22 70 26-110 24 100 16-30H330l14-20 16 20H540" stroke="#C6A955" stroke-width="5" stroke-dasharray="70 900"/></svg>`);
+layer(b(20), b(21), 0, 128, `<div style="font:600 30px Heebo;color:#C6A955">מלווים אתכם גם ברגעים החשובים</div>`);
+// approval row
+layer(b(21), b(23), 120, -20, `<div style="font:600 32px Heebo">בקשת החזר הוצאות רפואיות</div>`);
+layer(b(21), b(23), 186, 28, `<div style="font:500 24px Heebo;color:#6E6A64">הוגשה דרך הסוכן שלכם</div>`);
+const chip = layer(b(21), b(23), -232, 0, `<div id="chip" style="width:180px;height:64px;border-radius:32px;font:600 28px/64px Heebo;text-align:center;position:relative">
+  <span id="chipA" style="position:absolute;inset:0">בבדיקה</span><span id="chipB" style="position:absolute;inset:0">אושרה ✓</span></div>`);
+// customers
+layer(b(23), b(27), 0, -122, `<div style="font:500 30px Heebo;color:#6E6A64">לקוחות שהצטרפו אלינו</div>`);
+const num = layer(b(23), b(27), 0, 2, `<div class="geist" style="font-size:156px;font-weight:600;letter-spacing:-5px">0</div>`);
+layer(b(26), b(27), 0, 126, `<div style="font:600 32px Heebo;color:#C6A955">ועוד ממשיכים לגדול</div>`);
+// team
+const team = layer(b(27), b(28), 0, -62, `<div style="font:700 80px Heebo"><span class="geist" style="color:#354897;font-weight:600">10</span> עובדים</div>`);
+layer(b(27), b(28), 0, 22, `<div style="font:500 32px Heebo;color:#6E6A64">לשירותכם בכל שאלה</div>`);
+const dots = layer(b(27), b(28), 0, 98, `<div style="display:flex;gap:14px;direction:rtl">${Array.from({ length: 10 }, () => `<i style="display:block;width:26px;height:26px;border-radius:13px;background:#354897"></i>`).join("")}</div>`);
+// tabs
+const tabs = layer(b(28), b(31), 0, 0, `<div style="position:relative;width:920px;height:96px">${TAB.map((n, i) => `<span class="tab" style="position:absolute;top:0;width:${TW}px;right:${TW * i}px;text-align:center;font:500 34px/96px Heebo">${n}</span>`).join("")}</div>`);
+// toggle
+layer(b(31), b(33), 110, 0, `<div style="font:700 38px Heebo">מוגנים לחורף</div>`);
+layer(b(31), b(33), -170, 0, `<div id="tog" style="width:128px;height:68px;border-radius:34px"></div>`);
+// greeting
+layer(b(33), b(35), 0, -138, `<svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="#354897" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path id="umb" d="M3 11.5a9 9 0 0 1 18 0zM12 11.5v7a2 2 0 0 1-4 0M12 2.5v0" stroke-dasharray="70"/></svg>`);
+layer(b(33), b(35), 0, -22, `<div style="font:800 104px Heebo;color:#354897;letter-spacing:-1px">חורף בריא</div>`);
+layer(b(34), b(35), 0, 96, `<div style="font:500 40px Heebo;color:#2A2A2A">לכל לקוחותינו ובני משפחותיהם</div>`);
+// command palette
+const cmd = layer(b(35), b(39), 0, 0, `<div style="width:800px;height:60px;display:flex;align-items:center;gap:18px">
+  ${ICON('<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>', "#141414", 2.5, 34)}
+  <div style="flex:1;font:500 36px Heebo;display:flex;align-items:center"><span id="typed"></span><i id="caret" style="display:block;width:3px;height:40px;background:#C6A955;margin-right:3px"></i><span id="ph" style="color:#A9A49C">חיפוש…</span></div>
+  <span class="geist" style="font-size:24px;font-weight:500;color:#6E6A64;border:1.5px solid #D9D5CE;border-radius:10px;padding:6px 12px">⌘K</span></div>`);
+const res = layer(b(37), b(39), 0, 58, `<div id="res" style="width:820px;height:88px;border-radius:20px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;box-sizing:border-box">
+  <span style="font:600 34px Heebo">ממשיכים להוביל בשירות</span><span id="ent" class="geist" style="font-size:26px;border-radius:10px;padding:4px 12px">↵</span></div>`);
+// toast
+layer(b(39), b(40), 0, 0, `<div style="display:flex;align-items:center;gap:18px">${ICON('<circle cx="12" cy="12" r="9.5"/>' + CHECK, "#C6A955", 2.5, 40)}<span style="font:600 38px Heebo;color:#fff">ממשיכים להוביל בשירות</span></div>`);
+// logo + phone + call
+const logo = layer(b(40), b(43), 0, 0, `<div style="display:flex;align-items:center;gap:40px;direction:rtl">
+  <svg width="150" height="150" viewBox="0 0 100 100"><path id="lc" d="M30.3 22.6 A34 34 0 1 1 30.3 77.4" fill="none" stroke="#354897" stroke-width="15" stroke-dasharray="190"/><circle id="ld" cx="38" cy="50" r="7" fill="#C6A955"/></svg>
+  <i style="display:block;width:3px;height:170px;background:#354897"></i>
+  <div style="text-align:right"><div style="font:500 64px/1.02 Heebo;color:#354897">פנחס<br>בורנשטיין</div><div style="font:500 34px Heebo;color:#C6A955;margin-top:8px">שירות על בטוח</div></div></div>`);
+const phone = layer(b(41), b(43), 0, 160, `<div style="display:flex;align-items:center;gap:16px;direction:ltr"><span class="geist" style="font-size:62px;font-weight:600;color:#C6A955;letter-spacing:-1px">08-6326880</span><span id="ph2">${ICON('<path d="M5 3.5h3.5l1.8 4.5-2.3 1.4a11 11 0 0 0 6.6 6.6l1.4-2.3 4.5 1.8V19a2 2 0 0 1-2 2A16.5 16.5 0 0 1 3 5.5a2 2 0 0 1 2-2z"/>', "#C6A955", 2.5, 48)}</span></div>`);
+const call = layer(b(42), b(43), 0, 270, `<div style="width:300px;height:76px;border-radius:38px;background:#354897;color:#fff;font:600 30px/76px Heebo;text-align:center">התקשרו עכשיו</div>`);
+shape.appendChild(pill); pill.style.zIndex = 1; tabs.el.style.zIndex = 2;
+const pillLayer = { tin: b(28), tout: b(33) };
+
+const tabEls = [...tabs.el.querySelectorAll(".tab")], dotEls = [...dots.el.querySelectorAll("i")], stepEls = [...trk.el.querySelectorAll(".dot")];
+const q = id => document.getElementById(id);
+const rainCtx = q("rain").getContext("2d");
+const DROPS = Array.from({ length: 140 }, (_, i) => { const r = k => { const x = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return x - Math.floor(x); }; return [r(1) * 1500 - 30, r(2) * 1440, 900 + r(3) * 700, 30 + r(4) * 50, .15 + r(5) * .35]; });
+
+// ---------- layer enter / exit (own timing so swapped text never overlaps) ----------
+function vis(t, tin, tout) {
+  const en = tin === -Infinity ? 1 : S(t - tin - .07, 20, 1);
+  const ex = tout === Infinity ? 0 : smooth((t - tout) / .11);
+  return { o: en * (1 - ex), blur: (1 - en) * 9 + ex * 9, dy: (1 - en) * 12 - ex * 6, sc: .97 + .03 * en };
+}
+
+// ---------- seek(t): every style is a pure function of t ----------
+function seek(T) {
+  const t = ((T % L) + L) % L;
+  const z = zoom(t);
+  const w = shW(t), h = shH(t), sp = shPress(t);
+  // backgrounds (slow push-in while visible)
+  for (const [id, [a]] of Object.entries(BG)) {
+    const o = bgO[id](t), el = q(id);
+    el.style.opacity = o; el.style.display = o > .002 ? "block" : "none";
+    if (id !== "bgRain") { const k = clamp((t - a) / 6); el.style.transform = `scale(${1.16 - .06 * k})`; }
+  }
+  const so = sirenO(t), ph = (t / (P / 2)) % 2; // alternate red/blue twice per beat
+  const fl = x => Math.pow(Math.max(0, Math.cos(Math.PI * x)), 3);
+  q("sirenR").style.opacity = so * fl(ph); q("sirenB").style.opacity = so * fl(ph - 1);
+  const ro = rainO(t); q("rain").style.opacity = ro;
+  if (ro > .002) {
+    rainCtx.clearRect(0, 0, 1440, 1440); rainCtx.lineCap = "round"; rainCtx.lineWidth = 2;
+    for (const [x, y0, v, len, a] of DROPS) {
+      const y = ((y0 + t * v) % 1540) - 100;
+      rainCtx.strokeStyle = `rgba(220,230,245,${a})`;
+      rainCtx.beginPath(); rainCtx.moveTo(x, y); rainCtx.lineTo(x - len * .18, y + len); rainCtx.stroke();
+    }
+  }
+  world.style.transform = `scale(${z})`;
+  Object.assign(shape.style, {
+    width: w + "px", height: h + "px", borderRadius: Math.min(shR(t), h / 2, w / 2) + "px", background: shBg(t),
+    left: 720 - w / 2 + "px", top: 720 - h / 2 + "px", transform: `scale(${sp})`,
+  });
+  const ox = w / 2, oy = h / 2; // world → shape-local
+  for (const l of layers) {
+    const v = vis(t, l.tin, l.tout), on = v.o > .002;
+    l.el.style.display = on ? "block" : "none";
+    if (!on) continue;
+    let y = l.y;
+    if (l === cmd) y = cmdRowY(t);
+    if (l === res) y = cmdRowY(t) + 116;
+    if (l === logo) y = logoY(t);
+    if (l === phone) y = logoY(t) + 190;
+    if (l === call) y = logoY(t) + 300;
+    l.el.style.opacity = v.o;
+    l.el.style.filter = v.blur > .05 ? `blur(${v.blur}px)` : "none";
+    l.el.style.transform = `translate(${ox + l.x}px,${oy + y + v.dy}px) translate(-50%,-50%) scale(${v.sc})`;
+  }
+  // strokes
+  const a = q("arc"); a.setAttribute("stroke-dashoffset", 113.1 * (1 - .28 - .1 * Math.sin(t * 5))); a.setAttribute("transform", `rotate(${t * 520 - 90} 22 22)`);
+  q("chk").setAttribute("stroke-dashoffset", 22 * (1 - S(t - b(3) - .06, 14, 1)));
+  q("umb").setAttribute("stroke-dashoffset", 70 * (1 - S(t - b(33) - .08, 8, 1)));
+  q("lc").setAttribute("stroke-dashoffset", 190 * (1 - S(t - b(40) - .08, 9, 1)));
+  q("ld").setAttribute("r", 7 * S(t - b(40) - .3, 18, .82));
+  q("live").style.opacity = .35 + .65 * fl(t / P);
+  q("openBtn").style.background = mix("#354897", "#2C3C84", S(t - b(5), 30, 1));
+  // tracker
+  const p = prog(t);
+  q("pfill").style.width = 600 * p + "px";
+  stepEls.forEach((d, i) => {
+    const f = clamp((p - i / 3 + .12) / .12);
+    d.style.background = i === 3 ? mix("#E4E1DB", "#C6A955", f) : mix("#E4E1DB", "#354897", f);
+    d.style.color = mix("#6E6A64", "#FFFFFF", f); d.style.transform = `scale(${1 + .08 * f * (1 - f) * 4})`;
+  });
+  // before / after
+  const hx = handle(t) + 202; // px from left of the 404 frame
+  q("after").style.clipPath = `inset(0 0 0 ${hx}px)`;
+  q("hline").style.left = hx + "px"; q("hknob").style.left = hx + "px";
+  q("lblB").style.opacity = clamp((hx - 300) / 60) ; q("lblA").style.opacity = clamp((300 - hx) / 80);
+  // counters
+  nClaims.el.firstChild.textContent = Math.round(claims(t)).toLocaleString("en-US");
+  num.el.firstChild.textContent = Math.round(count(t)).toLocaleString("en-US");
+  // health
+  q("ecg").setAttribute("stroke-dashoffset", 900 * (1 - S(t - b(19) - .05, 6, 1)));
+  q("ecg2").setAttribute("stroke-dashoffset", -((t - b(20)) * 520) % 970);
+  q("ecg2").style.opacity = t > b(20) ? 1 : 0;
+  const ap = approved(t);
+  q("chip").style.background = mix("#F1EEE8", "#C6A955", ap);
+  q("chipA").style.opacity = 1 - ap; q("chipA").style.color = "#6E6A64";
+  q("chipB").style.opacity = ap; q("chipB").style.color = "#141414";
+  // team
+  dotEls.forEach((d, i) => { d.style.transform = `scale(${S(t - b(27) - .1 - i * .04, 22, .84)})`; });
+  team.el.querySelector(".geist").textContent = dotEls.filter((d, i) => t - b(27) - .1 - i * .04 > .06).length;
+  // pill
+  const L_ = pL(t), R_ = pR(t), T_ = pT(t), B_ = pB(t), pv = vis(t, pillLayer.tin, pillLayer.tout);
+  Object.assign(pill.style, {
+    left: ox + L_ + "px", top: oy + T_ + "px", width: R_ - L_ + "px", height: B_ - T_ + "px",
+    borderRadius: (B_ - T_) / 2 + "px", background: pCol(t), opacity: pv.o, display: pv.o > .002 ? "block" : "none",
+    boxShadow: t > b(30) ? "0 1px 3px rgba(20,20,20,.18)" : "none",
+  });
+  tabEls.forEach((el, i) => {
+    const [a0, a1] = tabRect(i), f = clamp((Math.min(a1, R_) - Math.max(a0, L_)) / (a1 - a0));
+    el.style.color = mix("#5A5650", "#FFFFFF", f);
+  });
+  q("tog").style.background = togCol(t);
+  // typing
+  const n = KEYS.filter(k => t >= k).length;
+  q("typed").textContent = PHRASE.slice(0, n);
+  q("ph").style.display = n ? "none" : "inline";
+  q("caret").style.opacity = (n > 0 && n < PHRASE.length) || ((t * 1.6) % 1 < .6) ? 1 : 0;
+  const hi = resHi(t);
+  q("res").style.background = mix("#F3F1ED", "#354897", hi);
+  q("res").style.color = mix("#141414", "#FFFFFF", hi);
+  q("ent").style.background = mix("#FFFFFF", "#2C3C84", hi);
+  q("ent").style.color = mix("#6E6A64", "#FFFFFF", hi);
+  q("ph2").style.transform = `rotate(${14 * Math.sin((t - b(42)) * 40) * Math.exp(-(t - b(42)) * 5) * (t > b(42) ? 1 : 0)}deg)`;
+  // cursor (world space, counter-scaled so it stays the same size on screen)
+  const pr = pressT(t);
+  cursor.style.transform = `translate(${720 + curX(t)}px,${720 + curY(t)}px) scale(${(1 - .14 * pr) / z})`;
+}
+window.seek = seek; window.LOOP = L; window.BEAT = P;
+window.ready = Promise.all([document.fonts.ready, ...[...document.images].map(i => i.decode().catch(() => {}))]).then(() => seek(0));
+
+// preview playback (rendering drives seek directly)
+if (!/render/.test(location.search)) {
+  const au = new Audio("song.mp3"); let t0 = null;
+  document.addEventListener("click", () => { au.currentTime = 0; au.play(); t0 = performance.now(); });
+  const loop = now => { if (t0 === null) t0 = now; seek((now - t0) / 1000); requestAnimationFrame(loop); };
+  window.ready.then(() => requestAnimationFrame(loop));
+}
+</script>
+</body>
+</html>
