@@ -65,15 +65,15 @@ def sweep_lp(x, cut):  # time-varying low-pass, cutoff per 512-sample block
 # ---------------- instruments ----------------
 def kick(d=.45):
     t = t_(d)
-    f = 45 + 110 * np.exp(-t / .035)
+    f = 62 + 120 * np.exp(-t / .03)
     ph = 2 * np.pi * np.cumsum(f) / SR
-    s = np.sin(ph) * np.exp(-t / .18) + .35 * np.exp(-t / .004) * rng.standard_normal(len(t))
-    return np.tanh(1.6 * s) * .9
+    s = np.sin(ph) * np.exp(-t / .11) + .45 * np.exp(-t / .004) * rng.standard_normal(len(t))
+    return np.tanh(1.4 * s) * .7
 
 def bass808(freq, d):
     t = t_(d)
-    s = np.sin(2 * np.pi * freq * t) * np.minimum(1, t / .005) * np.exp(-t / max(d * .7, .2))
-    return np.tanh(2.2 * s) * .55
+    s = np.sin(2 * np.pi * 2 * freq * t) * np.minimum(1, t / .005) * np.exp(-t / max(d * .4, .12))
+    return np.tanh(1.4 * s) * .35
 
 def clap():
     t = t_(.35); n = rng.standard_normal(len(t))
@@ -85,7 +85,7 @@ def hat(open_=False, vel=1.0):
     d = .18 if open_ else .045
     t = t_(d); n = rng.standard_normal(len(t))
     s = hp(n, 7000) * np.exp(-t / (.06 if open_ else .012))
-    return s * .22 * vel
+    return s * .14 * vel
 
 def supersaw(freq, d, voices=5, det=.012):
     t = t_(d); s = np.zeros((len(t), 2))
@@ -123,7 +123,7 @@ def impact(d=1.8):
     t = t_(d)
     boom = np.sin(2 * np.pi * np.cumsum(38 + 60 * np.exp(-t / .05)) / SR) * np.exp(-t / .5)
     crash = hp(rng.standard_normal(len(t)), 3500) * np.exp(-t / .6) * .35
-    return np.tanh(1.5 * boom) * .8 + crash
+    return np.tanh(1.2 * boom) * .35 + crash
 
 def snare_roll(t0, t1, buf):
     k = t0
@@ -230,8 +230,10 @@ music *= env[:, None]
 ir_t = t_(1.4); ir = rng.standard_normal((len(ir_t), 2)) * np.exp(-ir_t / .35)[:, None]
 wet = np.stack([fftconvolve(music[:, c] + .5 * fx[:, c], ir[:, c])[: len(music)] for c in range(2)], 1) * .012
 
-mix = drums * 1.0 + bass * 1.0 + music * .85 + fx * .8 + wet
+mix = drums * .9 + bass * .7 + music * 1.4 + fx * .8 + wet
 mix = mix[:N]
+mix = hp(mix, 70, 2)
+mix = .55 * mix + .45 * hp(mix, 180, 1)
 mix = np.tanh(mix * 1.15)
 # final fade over the last half second
 fade = np.minimum(1, (L - np.arange(N) / SR) / .5)[:, None]
