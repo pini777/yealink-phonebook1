@@ -9,7 +9,7 @@ const url = "file://" + here + "/" + (process.env.PAGE || "index.html") + "?rend
 const [mode, out, nw = "4"] = process.argv.slice(2);
 const browser = await chromium.launch();
 async function page() {
-  const p = await browser.newPage({ viewport: { width: 1440, height: 1440 } });
+  const p = await browser.newPage({ viewport: { width: +(process.env.VW || 1440), height: +(process.env.VH || 1440) } });
   await p.goto(url); await p.evaluate(() => window.ready);
   return p;
 }
