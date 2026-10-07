@@ -2,7 +2,7 @@
 import sys, subprocess, numpy as np
 SONG, OUT = sys.argv[1], sys.argv[2]
 SR, P, T0 = 48000, 0.7086937, 123.61814
-L = 28 * P
+L = 26 * P
 b = lambda i: i * P
 raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{T0}", "-t", f"{L}", "-i", SONG, "-ac", "2", "-ar", str(SR), "-f", "f32le", "-"], capture_output=True).stdout
 mus = np.frombuffer(raw, np.float32).reshape(-1, 2).copy()[: int(L * SR)]
@@ -32,10 +32,18 @@ def siren(d):
     e = np.minimum(1, np.minimum(t / .4, (d - t) / .5))
     s = 0.07 * e * (np.sin(ph) + .3 * np.sin(2 * ph))
     s[0] = 0.0001; return s
-soft = lambda fs: tone(fs, .9, .12, .35)
-ev = [(b(1), soft([1318])), (b(4), soft([880, 1318])), (b(6), soft([988])), (b(8), soft([880])), (b(10), soft([1046, 1568])),
-      (b(12.5), soft([1175])), (b(14.5), soft([1318])), (b(17.5), soft([880])), (b(18.5), soft([988])), (b(19.5), soft([1175])),
-      (b(20.5), soft([1318])), (b(22.6), soft([1046, 1568])), (b(25), soft([880, 1318, 1760]))]
+def boom():
+    t = np.arange(int(.35 * SR)) / SR
+    return .55 * np.exp(-t / .09) * np.sin(2 * np.pi * (55 + 90 * np.exp(-t / .03)) * t)
+def whoosh(d=.25):
+    t = np.arange(int(d * SR)) / SR; rng = np.random.default_rng(3)
+    n = np.convolve(rng.standard_normal(len(t)), np.ones(12) / 12, "same")
+    return .18 * n * np.sin(np.pi * t / d) ** 2
+HIT = [2, 3, 4, 7.4, 9, 11, 13, 15, 17, 20, 21]
+ev = [(b(h), boom()) for h in HIT] + [(b(h), thock()) for h in HIT]
+ev += [(b(h) - .12, whoosh()) for h in [1, 7, 18.5, 22.5, 25]]
+ev += [(b(h), pop(620 + 40 * k, .25)) for k, h in enumerate([1, 7, 18.5, 22.5, 25])]
+ev += [(b(4) + .1 + i * .06, key()) for i in range(6)]
 for t, s in ev:
     pk = int(np.argmax(np.abs(s)))          # align the measured peak to the event time
     i0 = int(round(t * SR)) - pk

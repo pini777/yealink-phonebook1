@@ -2,33 +2,38 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="utf-8">
-<title>משרות · פנחס בורנשטיין</title>
+<title>דרושים · פנחס בורנשטיין</title>
 <style>
-@font-face{font-family:Heebo;src:url(fonts/heebo-hebrew-300-normal.woff2) format("woff2");font-weight:300}
-@font-face{font-family:Heebo;src:url(fonts/heebo-hebrew-400-normal.woff2) format("woff2");font-weight:400}
 @font-face{font-family:Heebo;src:url(fonts/heebo-hebrew-500-normal.woff2) format("woff2");font-weight:500}
 @font-face{font-family:Heebo;src:url(fonts/heebo-hebrew-700-normal.woff2) format("woff2");font-weight:600 700}
+@font-face{font-family:Heebo;src:url(fonts/heebo-hebrew-800-normal.woff2) format("woff2");font-weight:800}
 @font-face{font-family:Geist;src:url(fonts/Geist-Variable.woff2) format("woff2");font-weight:100 900}
-:root{--navy:#0E1838;--gold:#C6A955}
-html,body{margin:0;background:var(--navy)}
-#stage{position:relative;width:1080px;height:1920px;overflow:hidden;background:var(--navy);font-family:Heebo,Geist,sans-serif;color:#fff;-webkit-font-smoothing:antialiased}
-#bg{position:absolute;inset:-40px;background:url(photos/office-bg2.jpg) center/cover}
-#shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(14,24,56,.55),rgba(14,24,56,.82) 55%,rgba(14,24,56,.95))}
-#frame{position:absolute;inset:56px;border:1.5px solid rgba(198,169,85,.55)}
-.ly{position:absolute;left:0;top:0;white-space:nowrap;text-align:center}
-.kicker{font:500 34px Heebo;letter-spacing:10px;color:var(--gold)}
-.rule{display:block;height:2px;background:var(--gold);margin:0 auto}
-.row{display:flex;align-items:center;gap:28px;width:800px;padding:30px 0;border-bottom:1px solid rgba(255,255,255,.16);font:400 54px Heebo}
-.row b{display:block;width:12px;height:12px;background:var(--gold);transform:rotate(45deg)}
+html,body{margin:0;background:#0B1A4A}
+#stage{position:relative;width:1080px;height:1920px;overflow:hidden;background:#0B1A4A;font-family:Heebo,Geist,sans-serif;color:#fff;-webkit-font-smoothing:antialiased}
+#cam{position:absolute;inset:0;transform-origin:540px 900px}
+#photo{position:absolute;left:0;top:0;width:2375px;height:1920px;background:url(photos/office-full.jpg) 0 0/2375px 1920px;transform-origin:1315px 800px}
+#fade{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 50%,rgba(11,26,74,.15),rgba(11,26,74,.75) 75%)}
+#dim{position:absolute;inset:0;background:#0B1A4A;opacity:0}
+#flash{position:absolute;inset:0;background:#FFD200;opacity:0}
+#bar{position:absolute;right:0;top:0;height:10px;background:#FFD200}
+.ly{position:absolute;left:0;top:0;white-space:nowrap}
+.brush{display:inline-block;background:#FFD200;color:#0B1A4A;padding:6px 44px 14px;transform-origin:right center;
+  clip-path:polygon(2% 8%,12% 0,30% 6%,52% 1%,74% 5%,92% 0,100% 10%,98% 40%,100% 78%,94% 100%,70% 94%,46% 100%,24% 95%,6% 100%,0 84%,2% 48%)}
 .geist{font-family:Geist,sans-serif;direction:ltr}
+.card{display:flex;align-items:center;gap:30px;background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.2);border-radius:36px;padding:30px 44px;box-sizing:border-box}
+.pill{display:flex;align-items:center;gap:20px;background:#FFD200;color:#0B1A4A;border-radius:70px;padding:24px 54px;font-weight:700}
+.ch{display:inline-block}
 svg{display:block;overflow:visible}
 </style>
 </head>
 <body>
-<div id="stage"><div id="bg"></div><div id="shade"></div><div id="frame"></div><div id="layers"></div></div>
+<div id="stage">
+  <div id="cam"><div id="photo"></div><div id="fade"></div><div id="dim"></div><div id="layers"></div></div>
+  <div id="flash"></div><div id="bar"></div>
+</div>
 <script>
-// ---------- time grid (measured: 84.66 BPM, 28 beats = 7 bars ≈ 19.8 s) ----------
-const P = 0.7086937, L = 28 * P, b = i => i * P;
+// ---------- time grid (measured: 84.66 BPM, 26 beats ≈ 18.4 s) ----------
+const P = 0.7086937, L = 26 * P, b = i => i * P;
 function S(t, w, z) {
   if (t <= 0) return 0;
   if (z >= 1) return 1 - Math.exp(-w * t) * (1 + w * t);
@@ -37,66 +42,94 @@ function S(t, w, z) {
 }
 const clamp = (x, a = 0, c = 1) => Math.min(c, Math.max(a, x));
 const smooth = x => (x = clamp(x), x * x * (3 - 2 * x));
+const Y = "#FFD200";
+const ICON = (d, s = 80, c = Y) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const I = {
+  head: '<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/><path d="M19 20a3 3 0 0 1-3 2h-3"/>',
+  coin: '<ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v4c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 10v4c0 1.7 3.1 3 7 3s7-1.3 7-3v-4M5 14v4c0 1.7 3.1 3 7 3s7-1.3 7-3v-4"/>',
+  fire: '<path d="M12 22c4 0 7-2.8 7-7 0-4.5-3.5-6.5-4.5-10C12 7 11 9 11 11c-1-.6-2-2-2-3.5C6.5 9.5 5 12 5 15c0 4.2 3 7 7 7z"/>',
+  team: '<circle cx="12" cy="8" r="3"/><circle cx="5" cy="10" r="2.2"/><circle cx="19" cy="10" r="2.2"/><path d="M6.5 19a5.5 5.5 0 0 1 11 0M1.5 18a3.6 3.6 0 0 1 5-3.2M22.5 18a3.6 3.6 0 0 0-5-3.2"/>',
+  pin: '<path d="M12 22s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6l8.5 7 8.5-7"/>',
+};
+const letters = (s) => [...s].map(c => `<span class="ch">${c === " " ? "&nbsp;" : c}</span>`).join("");
+const REASON = (n, ic, txt) => `<div style="display:flex;align-items:center;gap:40px"><span class="geist" style="font-size:190px;font-weight:800;color:${Y};line-height:1">${n}</span>
+  <div class="card" style="width:680px;padding:28px 34px">${ICON(ic, 84)}<span style="font:800 54px Heebo">${txt}</span></div></div>`;
 
-const LOGO = (id) => `<div style="display:flex;flex-direction:column;align-items:center;gap:34px">
-  <svg width="200" height="200" viewBox="0 0 100 100"><path class="lc" d="M30.3 22.6 A34 34 0 1 1 30.3 77.4" fill="none" stroke="#C6A955" stroke-width="12" stroke-dasharray="190"/><circle class="ld" cx="38" cy="50" r="6.5" fill="#fff"/></svg>
-  <div style="font:300 104px/1 Heebo;letter-spacing:2px">פנחס בורנשטיין</div>
-  <i class="rule grow" style="width:180px"></i>
-  <div style="font:400 44px Heebo;color:#C6A955;letter-spacing:6px">שירות על בטוח</div></div>`;
-
-// [tin, tout, y, html, group]  — every layer has its own enter/exit so swapped text never overlaps
+// [tin, tout, y, html, kind]   kind: slam (lands with a bounce), pop, slide, wipe (brush), jump (letters hop one by one)
+const OPEN = `<div style="font:800 140px/1 Heebo">משרדינו גדל</div>`;
+const FACT = (ic, txt, size = 104) => `<div style="display:flex;flex-direction:column;align-items:center;gap:56px">
+  <div class="ico" style="width:260px;height:260px;border-radius:130px;background:rgba(255,210,0,.14);border:3px solid ${Y};display:flex;align-items:center;justify-content:center">${ICON(ic, 150)}</div>
+  <div style="font:800 ${size}px/1.1 Heebo;text-align:center">${txt}</div></div>`;
 const LY = [
-  [-Infinity, b(3.5), 900, LOGO(), "logo"],
-  [b(1), b(3.5), 1380, `<div class="kicker">משרות פנויות</div>`],
-  [b(4), b(8), 820, `<div style="font:300 92px/1.15 Heebo">המשרד שלנו מתרחב</div>`],
-  [b(5), b(8), 930, `<i class="rule grow" style="width:220px"></i>`],
-  [b(6), b(8), 1050, `<div style="font:600 64px/1.3 Heebo">ואנו מגייסים אנשי מקצוע<br>מצטיינים לצוות</div>`],
-  [b(8), b(12), 820, `<div style="font:300 84px/1.2 Heebo;opacity:.85">איננו מחפשים כל אחד.</div>`],
-  [b(10), b(12), 1000, `<div style="font:700 84px/1.2 Heebo;color:#C6A955">אנו מחפשים את<br>הטובים ביותר.</div>`],
-  [b(12), b(17), 560, `<div class="kicker">המשרות</div>`],
-  [b(12.5), b(17), 800, `<div style="display:flex;flex-direction:column;align-items:center;gap:14px"><div style="font:600 80px Heebo">נציג/ת מכירות</div><div style="font:300 44px Heebo;opacity:.85">לבעלי יכולת מכירה מוכחת</div></div>`],
-  [b(13.5), b(17), 950, `<i class="rule grow" style="width:120px;opacity:.6"></i>`],
-  [b(14.5), b(17), 1100, `<div style="display:flex;flex-direction:column;align-items:center;gap:14px"><div style="font:600 80px Heebo">נציג/ת שירות לקוחות</div><div style="font:300 44px Heebo;opacity:.85">משרה מלאה</div></div>`],
-  [b(17), b(22), 520, `<div class="kicker">מה אנו מציעים</div>`],
-  [b(17.5), b(22), 700, `<div class="row"><b></b>שכר גבוה ומתגמל</div>`],
-  [b(18.5), b(22), 840, `<div class="row"><b></b>תנאים מצוינים</div>`],
-  [b(19.5), b(22), 980, `<div class="row"><b></b>סביבת עבודה מקצועית ותומכת</div>`],
-  [b(20.5), b(22), 1120, `<div class="row"><b></b>משרד מוביל באשדוד</div>`],
-  [b(22), b(25), 760, `<div style="font:300 72px/1.2 Heebo">קורות חיים יש לשלוח לכתובת</div>`],
-  [b(22.6), b(25), 920, `<div class="geist" style="font-size:88px;font-weight:500;color:#C6A955;letter-spacing:1px">pb@pbslb.com</div>`],
-  [b(23.2), b(25), 1010, `<i class="rule grow" style="width:560px"></i>`],
-  [b(24), b(25), 1110, `<div style="font:400 38px Heebo;opacity:.7">פניות מתאימות בלבד ייענו</div>`],
-  [b(25), Infinity, 900, LOGO(), "logo"],
+  [-Infinity, b(2), 820, OPEN, "pop"],
+  [b(25), Infinity, 820, OPEN, "pop"],
+  [b(1), b(2), 1040, `<div class="brush" style="font:800 108px/1.1 Heebo">ומרחיבים את הצוות!</div>`, "wipe"],
+  [b(2), b(7), 600, `<div style="font:800 150px/1 Heebo">מחפשים</div>`, "slam"],
+  [b(3), b(7), 820, `<div style="font:800 140px/1 Heebo">עובדי מכירות</div>`, "slam"],
+  [b(4), b(7), 1110, `<div class="brush" style="font:800 270px/1.05 Heebo;padding:4px 60px 22px">${letters("תותחים")}</div>`, "jump"],
+  [b(7), b(9), 700, `<div style="font:800 100px Heebo;color:${Y}">וגם</div>`, "pop"],
+  [b(7.4), b(9), 960, `<div style="display:flex;flex-direction:column;align-items:center;gap:30px">${ICON(I.head, 170)}<div style="font:800 100px/1.1 Heebo;text-align:center">עובד לשירות<br>לקוחות</div><div style="font:500 60px Heebo;opacity:.9">משרה מלאה</div></div>`, "slam"],
+  [b(9), b(11), 960, FACT(I.coin, "שכר גבוה<br>ומתגמל", 120), "slam"],
+  [b(11), b(13), 960, FACT(I.fire, "תנאים אש", 130), "slam"],
+  [b(13), b(15), 960, FACT(I.team, "אווירה צעירה<br>וכיפית", 120), "slam"],
+  [b(15), b(17), 960, FACT(I.pin, "המשרד<br>באשדוד", 130), "slam"],
+  [b(17), b(20), 900, `<div style="display:flex;flex-direction:column;align-items:center;gap:40px">
+    <svg width="300" height="300" viewBox="0 0 100 100"><path id="lc" d="M30.3 22.6 A34 34 0 1 1 30.3 77.4" fill="none" stroke="${Y}" stroke-width="15" stroke-dasharray="190"/><circle id="ld" cx="38" cy="50" r="7" fill="#fff"/></svg>
+    <div style="font:700 130px/1 Heebo">פנחס בורנשטיין</div></div>`, "pop"],
+  [b(18.5), b(20), 1260, `<div class="brush" style="font:800 90px/1.1 Heebo">שירות על בטוח</div>`, "wipe"],
+  [b(20), b(25), 700, `<div style="font:800 116px/1.1 Heebo;text-align:center">שלחו קורות חיים</div>`, "slam"],
+  [b(21), b(25), 960, `<div class="pill geist" style="font-size:84px">${ICON(I.mail, 70, "#0B1A4A")}pb@pbslb.com</div>`, "slam"],
+  [b(22.5), b(25), 1220, `<div style="font:800 80px Heebo;color:${Y}">רק לתותחים אמיתיים</div>`, "pop"],
 ];
 const host = document.getElementById("layers");
-const layers = LY.map(([tin, tout, y, html, g]) => {
+const layers = LY.map(([tin, tout, y, html, kind]) => {
   const el = document.createElement("div"); el.className = "ly"; el.innerHTML = html; host.appendChild(el);
-  return { el, tin, tout, y, g, rules: [...el.querySelectorAll(".grow")], lc: el.querySelector(".lc"), ld: el.querySelector(".ld"), rows: el.querySelector(".row") };
+  return { el, tin, tout, y, kind, br: [...el.querySelectorAll(".brush")], ch: [...el.querySelectorAll(".ch")] };
 });
+// beats that hit hard: camera punch + shake
+const HIT = [2, 3, 4, 7.4, 9, 11, 13, 15, 17, 20, 21];
+const imp = (t, a) => S(t - a, 32, 1) - S(t - a - .06, 12, 1); // 0→1→0 pulse
+// how dark the photo is behind text-heavy beats (the monitor logo stays visible in the hook and at the end)
+const DIMS = [[b(2), .66], [b(17), .5], [b(20), .62], [b(25), .55]];
 
 function seek(T) {
   const t = ((T % L) + L) % L, ph = 2 * Math.PI * t / L;
-  // slow, periodic drift so the loop point is seamless
-  document.getElementById("bg").style.transform = `scale(${1.06 + .025 * Math.sin(ph)}) translateY(${14 * Math.cos(ph)}px)`;
+  let punch = 0, shake = 0;
+  for (const h of HIT) { punch += .045 * imp(t, b(h)); shake += Math.exp(-Math.max(0, t - b(h)) * 14) * (t > b(h) ? 1 : 0); }
+  const sx = 14 * shake * Math.sin(t * 90), sy = 10 * shake * Math.cos(t * 77);
+  document.getElementById("cam").style.transform = `translate(${sx}px,${sy}px) scale(${1 + punch})`;
+  document.getElementById("photo").style.transform = `translateX(${-775 + 230 * Math.sin(ph)}px) scale(${1.06 + .04 * Math.cos(ph)})`;
+  let dim = .55, prev = .55; for (const [a, v] of DIMS) { dim += (v - prev) * S(t - a, 8, 1); prev = v; }
+  document.getElementById("dim").style.opacity = dim;
+  document.getElementById("flash").style.opacity = .3 * imp(t, b(4)) + .15 * imp(t, b(9)) + .15 * imp(t, b(17));
+  document.getElementById("bar").style.width = 1080 * t / L + "px";
   for (const l of layers) {
-    const en = l.tin === -Infinity ? 1 : S(t - l.tin, 9, 1);
-    const ex = l.tout === Infinity ? 0 : smooth((t - l.tout) / .3);
-    const o = clamp(en * 1.15) * (1 - ex);
+    const pre = l.tin === -Infinity;
+    const ex = l.tout === Infinity ? 0 : smooth((t - l.tout) / .1);
+    const o = (pre ? 1 : clamp((t - l.tin) / .06)) * (1 - ex);
     l.el.style.display = o > .002 ? "block" : "none";
     if (o <= .002) continue;
-    const blur = (1 - en) * 6 + ex * 6;
+    let tr = "", blur = ex * 10;
+    if (l.kind === "pop") { const e = pre ? 1 : S(t - l.tin, 18, .75); tr = `scale(${.75 + .25 * e})`; blur += (1 - clamp(e)) * 10; }
+    if (l.kind === "slam") { const e = S(t - l.tin, 22, .45); tr = `scale(${1.7 - .7 * e})`; blur += (1 - clamp(e)) * 14; }
+    if (l.kind === "slide") { const e = S(t - l.tin, 16, .7); tr = `translateX(${-200 * (1 - e)}px)`; blur += (1 - clamp(e)) * 8; }
+    if (l.kind === "wipe" || l.kind === "jump") tr = "";
+    l.br.forEach(e => { const k = l.kind === "wipe" || l.kind === "jump" ? clamp(S(t - l.tin, 18, 1)) : 1; e.style.transform = `rotate(-2deg) scaleX(${k})`; });
+    // letters hop one after another, then keep a small bounce on every half beat
+    l.ch.forEach((c, i) => {
+      const s = t - l.tin - .1 - i * .06;
+      const land = S(s, 20, .4), hop = s > .5 ? 18 * Math.abs(Math.sin(Math.PI * (s - .5) / (P / 2) + i * .5)) * Math.exp(-(s - .5) * .8) : 0;
+      c.style.transform = `translateY(${-140 * (1 - land) - hop}px) scale(${.4 + .6 * land})`;
+      c.style.opacity = clamp(s / .05);
+    });
+    const ico = l.el.querySelector(".ico");
+    if (ico) { const s2 = t - l.tin; ico.style.transform = `scale(${S(s2, 18, .45)}) rotate(${(1 - S(s2, 12, .6)) * -25}deg)`; }
+    const lc = l.el.querySelector("#lc");
+    if (lc) { lc.setAttribute("stroke-dashoffset", 190 * (1 - S(t - l.tin - .1, 9, 1))); l.el.querySelector("#ld").setAttribute("r", 7 * S(t - l.tin - .35, 18, .5)); }
     l.el.style.opacity = o;
     l.el.style.filter = blur > .05 ? `blur(${blur}px)` : "none";
-    l.el.style.transform = `translate(540px,${l.y + 26 * (1 - en) - 10 * ex}px) translate(-50%,-50%)`;
-    const k = l.tin === -Infinity ? 1 : S(t - l.tin - .15, 6, 1);
-    l.rules.forEach(r => r.style.transform = `scaleX(${k})`);
-    if (l.lc) {
-      // the logo instance at the end draws in; the one at the start is already drawn (same final frame)
-      const d = l.tin === -Infinity ? 1 : S(t - l.tin - .05, 5, 1);
-      l.lc.setAttribute("stroke-dashoffset", 190 * (1 - d));
-      l.ld.setAttribute("r", 6.5 * (l.tin === -Infinity ? 1 : S(t - l.tin - .5, 10, 1)));
-    }
-    if (l.rows) l.rows.style.borderBottomColor = `rgba(255,255,255,${.16 * k})`;
+    l.el.style.transform = `translate(540px,${l.y}px) translate(-50%,-50%) ${tr}`;
   }
 }
 window.seek = seek; window.LOOP = L; window.BEAT = P;
