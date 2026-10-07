@@ -41,8 +41,8 @@ def whoosh(d=.25):
     return .18 * n * np.sin(np.pi * t / d) ** 2
 HIT = [2, 3, 4, 7.4, 9, 11, 13, 15, 17, 20, 21]
 ev = [(b(h), boom()) for h in HIT] + [(b(h), thock()) for h in HIT]
-ev += [(b(h) - .12, whoosh()) for h in [1, 7, 18.5, 22.5, 25]]
-ev += [(b(h), pop(620 + 40 * k, .25)) for k, h in enumerate([1, 7, 18.5, 22.5, 25])]
+ev += [(b(h) - .12, whoosh()) for h in [1, 7, 18.5, 25]]
+ev += [(b(h), pop(620 + 40 * k, .25)) for k, h in enumerate([1, 7, 18.5, 25])]
 ev += [(b(4) + .1 + i * .06, key()) for i in range(6)]
 for t, s in ev:
     pk = int(np.argmax(np.abs(s)))          # align the measured peak to the event time
