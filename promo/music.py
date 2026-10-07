@@ -226,15 +226,50 @@ for tk in (0, b(1), b(2), b(3), b(24)):
     duck_at(tk)
 music *= env[:, None]
 
+# ---------- epic layer: lead, brass stabs and accents synced to each moving element ----------
+def lead(freq, d):
+    t = t_(d); s = supersaw(freq, d, voices=7, det=.018) + .5 * supersaw(freq * 2, d, voices=3, det=.01)
+    env = (np.minimum(1, t / .01) * np.exp(-t / .5))[:, None]
+    return lp(s * env, 6500) * .9
+
+def stab(names, d=.45):
+    t = t_(d); s = sum(supersaw(note(n), d, voices=5, det=.02) for n in names) / len(names)
+    return lp(s * (np.minimum(1, t / .004) * np.exp(-t / .16))[:, None], 7000) * 1.6
+
+def bell(freq, d=.8):
+    t = t_(d); s = (np.sin(2 * np.pi * freq * t) + .4 * np.sin(2 * np.pi * freq * 2.76 * t)) * np.exp(-t / .25)
+    return np.stack([s, s], 1) * .35
+
+epic = np.zeros_like(music)
+# lead melody over the drop and the call to action (quarter notes, one octave above the arp)
+MEL = {"D": ["F#5", "A5", "D6", "C#6"], "A": ["E5", "A5", "C#6", "B5"], "Bm": ["F#5", "B5", "D6", "C#6"], "G": ["G5", "B5", "D6", "E6"]}
+for bar in range(1, 6):
+    for k, n in enumerate(MEL[PROG[bar][0]]):
+        tk = b(4 * bar + k)
+        if b(17) <= tk < b(20) or tk >= b(24):
+            continue
+        place(epic, tk, lead(note(n), .65))
+# brass stab on every word/element that slams in (times from jobs.html)
+for tk in [0, 1, 2, 3, 4, 7, 7.4, 9, 11, 13, 15, 17, 18.5, 20, 21, 24]:
+    bar = min(6, int(tk // 4)); place(epic, b(tk), stab(PROG[bar][1]), 1.0)
+# letters of "תותחים" hop one by one: rising notes
+for i, n in enumerate(["D5", "E5", "F#5", "A5", "B5", "D6"]):
+    place(epic, b(4) + .1 + i * .06, np.stack([pluck(note(n), .25)] * 2, 1), 2.2)
+# shockwave rings on the icons: bell pings
+for tk in [9, 10, 11, 12, 13, 14, 15, 16]:
+    place(epic, b(tk), bell(note("A6") if tk % 2 else note("D6")))
+music += epic
+
 # reverb on music + fx
 ir_t = t_(1.4); ir = rng.standard_normal((len(ir_t), 2)) * np.exp(-ir_t / .35)[:, None]
 wet = np.stack([fftconvolve(music[:, c] + .5 * fx[:, c], ir[:, c])[: len(music)] for c in range(2)], 1) * .012
 
-mix = drums * .9 + bass * .7 + music * 1.4 + fx * .8 + wet
+mix = drums * 1.0 + bass * .7 + music * 1.5 + fx * .9 + wet * 1.5
 mix = mix[:N]
 mix = hp(mix, 70, 2)
 mix = .55 * mix + .45 * hp(mix, 180, 1)
-mix = np.tanh(mix * 1.15)
+mix = mix / np.percentile(np.abs(mix), 99.7)
+mix = np.tanh(mix * 1.6)
 # final fade over the last half second
 fade = np.minimum(1, (L - np.arange(N) / SR) / .5)[:, None]
 mix *= fade
