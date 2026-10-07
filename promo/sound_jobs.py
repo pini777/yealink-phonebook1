@@ -1,14 +1,17 @@
-"""Builds the 10s cut audio: song segment from the measured downbeat + UI sounds aligned by their peak."""
+"""Builds the recruitment-video audio: the original instrumental (music.py) + whooshes on scene cuts, aligned by peak."""
 import sys, subprocess, numpy as np
 SONG, OUT = sys.argv[1], sys.argv[2]
-SR, P, T0 = 48000, 0.7086937, 123.61814
+SR, P, T0 = 44100, 0.7086937, 0.0
 L = 26 * P
 b = lambda i: i * P
-raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{T0}", "-t", f"{L}", "-i", SONG, "-ac", "2", "-ar", str(SR), "-f", "f32le", "-"], capture_output=True).stdout
-mus = np.frombuffer(raw, np.float32).reshape(-1, 2).copy()[: int(L * SR)]
+import wave as _w
+with _w.open(SONG) as _f:   # the original instrumental from music.py (already on the beat grid)
+    assert _f.getframerate() == SR
+    mus = np.frombuffer(_f.readframes(_f.getnframes()), "<i2").reshape(-1, 2).astype(np.float32) / 32767
+mus = mus[: int(L * SR)]
 n = np.arange(int(L * SR)) / SR
 fade = np.minimum(1, np.minimum(n / .012, (L - n) / .012))[:, None]
-mix = mus * 0.82 * fade[: len(mus)]
+mix = mus * 0.9
 
 def env(d, a, r):
     t = np.arange(int(d * SR)) / SR
@@ -40,9 +43,7 @@ def whoosh(d=.25):
     n = np.convolve(rng.standard_normal(len(t)), np.ones(12) / 12, "same")
     return .18 * n * np.sin(np.pi * t / d) ** 2
 HIT = [2, 3, 4, 7.4, 9, 11, 13, 15, 17, 20, 21]
-ev = [(b(h), boom()) for h in HIT] + [(b(h), thock()) for h in HIT]
-ev += [(b(h) - .15, whoosh(.35)) for h in [2, 7, 9, 11, 13, 15, 17, 20, 25]]
-ev += [(b(h), pop(620 + 40 * k, .25)) for k, h in enumerate([1, 7, 18.5, 25])]
+ev = [(b(h) - .15, whoosh(.35)) for h in [2, 7, 9, 11, 13, 15, 17, 20]]
 ev += [(b(4) + .1 + i * .06, key()) for i in range(6)]
 for t, s in ev:
     pk = int(np.argmax(np.abs(s)))          # align the measured peak to the event time
